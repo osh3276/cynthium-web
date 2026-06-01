@@ -1,0 +1,548 @@
+/* ===== Reset & Base ===== */
+*,
+*::before,
+*::after {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+:root {
+	--bg: #1e1e1e;
+	--bg-light: #252526;
+	--bg-lighter: #2d2d2d;
+	--bg-hover: #333333;
+	--border: #3c3c3c;
+	--text: #cccccc;
+	--text-dim: #888888;
+	--text-bright: #e0e0e0;
+	--accent: #094771;
+	--accent-hover: #0d5a8a;
+	--tab-active-bg: #2d2d2d;
+	--tab-inactive-bg: #1e1e1e;
+	--tab-border: #3c3c3c;
+	--input-bg: #3c3c3c;
+	--input-text: #cccccc;
+	--input-border: #555555;
+	--scrollbar-bg: transparent;
+	--scrollbar-thumb: #424242;
+	--scrollbar-thumb-hover: #555555;
+	--font: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+	--font-mono: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+	--font-size: 12px;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+	overflow: hidden;
+}
+
+body {
+	font-family: var(--font);
+	font-size: var(--font-size);
+	color: var(--text);
+	background: var(--bg);
+	-webkit-font-smoothing: antialiased;
+}
+
+/* ===== App Layout ===== */
+.app-layout {
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	overflow: hidden;
+}
+
+/* ===== Menu Bar ===== */
+.menubar {
+	display: flex;
+	align-items: center;
+	height: 28px;
+	background: var(--bg-light);
+	border-bottom: 1px solid var(--border);
+	padding: 0 4px;
+	flex-shrink: 0;
+	user-select: none;
+}
+
+.menu-dropdown {
+	position: relative;
+	padding: 2px 8px;
+	cursor: default;
+	border-radius: 3px;
+}
+
+.menu-dropdown:hover,
+.menu-dropdown.menu-open {
+	background: var(--accent);
+}
+
+.menu-label {
+	font-size: 12px;
+	color: var(--text);
+}
+
+.menu-popup {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	min-width: 200px;
+	background: var(--bg-lighter);
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+	padding: 4px 0;
+	z-index: 1000;
+}
+
+.menu-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	width: 100%;
+	padding: 4px 16px;
+	background: none;
+	border: none;
+	color: var(--text);
+	font-size: 12px;
+	cursor: default;
+	text-align: left;
+	gap: 24px;
+}
+
+.menu-item:hover {
+	background: var(--accent);
+	color: white;
+}
+
+.menu-item:focus-visible {
+	outline: none;
+}
+
+.menu-shortcut {
+	color: var(--text-dim);
+	font-size: 11px;
+	margin-left: auto;
+}
+
+.menu-item:hover .menu-shortcut {
+	color: rgba(255, 255, 255, 0.7);
+}
+
+.menu-separator {
+	height: 1px;
+	background: var(--border);
+	margin: 4px 8px;
+}
+
+/* ===== Main Content ===== */
+.main-content {
+	flex: 1;
+	display: flex;
+	overflow: hidden;
+}
+
+/* ===== Left Pane ===== */
+.left-pane {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	min-width: 0;
+}
+
+.view-area {
+	flex: 1;
+	overflow: hidden;
+	min-height: 200px;
+}
+
+.results-area {
+	flex-shrink: 0;
+	height: 200px;
+	overflow: hidden;
+	border-top: 1px solid var(--border);
+}
+
+/* ===== View Container (Map + Terrain splitter) ===== */
+.view-container {
+	display: flex;
+	height: 100%;
+	width: 100%;
+}
+
+.view-pane {
+	overflow: hidden;
+	display: flex;
+}
+
+.view-handle {
+	width: 4px;
+	cursor: col-resize;
+	background: var(--border);
+	flex-shrink: 0;
+	position: relative;
+}
+
+.view-handle:hover {
+	background: var(--accent);
+}
+
+/* ===== Map / Terrain Views ===== */
+.map-view,
+.terrain-view {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--bg);
+	position: relative;
+	overflow: hidden;
+}
+
+.map-placeholder {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	color: var(--text-dim);
+	opacity: 0.6;
+}
+
+.map-placeholder span {
+	font-size: 14px;
+}
+
+.view-overlay {
+	position: absolute;
+	padding: 4px 8px;
+	background: rgba(0, 0, 0, 0.6);
+	color: var(--text-bright);
+	font-size: 11px;
+	border-radius: 3px;
+	pointer-events: none;
+}
+
+.top-left {
+	top: 6px;
+	left: 6px;
+}
+
+/* ===== Simulation Results ===== */
+.simulation-results {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	background: var(--bg);
+	padding: 6px 8px;
+	gap: 4px;
+}
+
+.results-header {
+	display: flex;
+	align-items: center;
+}
+
+.results-title {
+	font-weight: 600;
+	font-size: 12px;
+	color: var(--text-bright);
+}
+
+.results-status {
+	font-size: 11px;
+	color: var(--text-dim);
+	padding: 2px 0;
+}
+
+.outer-tabs {
+	display: flex;
+	gap: 0;
+	border-bottom: 1px solid var(--tab-border);
+}
+
+.outer-tab {
+	padding: 4px 12px;
+	background: var(--tab-inactive-bg);
+	border: 1px solid var(--tab-border);
+	border-bottom: none;
+	color: var(--text);
+	font-size: 12px;
+	cursor: default;
+	margin-bottom: -1px;
+	border-radius: 3px 3px 0 0;
+}
+
+.outer-tab-active {
+	background: var(--tab-active-bg);
+	border-bottom-color: var(--tab-active-bg);
+	color: var(--text-bright);
+}
+
+.outer-tab:hover:not(.outer-tab-active) {
+	background: var(--bg-hover);
+}
+
+.outer-tab-content {
+	flex: 1;
+	overflow: hidden;
+}
+
+.stats-tab-inner {
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
+
+.inner-tabs {
+	display: flex;
+	gap: 0;
+	border-bottom: 1px solid var(--tab-border);
+}
+
+.inner-tab {
+	padding: 3px 10px;
+	background: var(--tab-inactive-bg);
+	border: 1px solid var(--tab-border);
+	border-bottom: none;
+	color: var(--text);
+	font-size: 11px;
+	cursor: default;
+	margin-bottom: -1px;
+	border-radius: 3px 3px 0 0;
+}
+
+.inner-tab-active {
+	background: var(--tab-active-bg);
+	border-bottom-color: var(--tab-active-bg);
+	color: var(--text-bright);
+}
+
+.inner-tab:hover:not(.inner-tab-active) {
+	background: var(--bg-hover);
+}
+
+.inner-tab-content {
+	flex: 1;
+	overflow-y: auto;
+	padding: 4px 0;
+}
+
+.fields-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.fields-table tr {
+	border-bottom: 1px solid var(--border);
+}
+
+.fields-table td {
+	padding: 2px 8px;
+	font-size: 11px;
+}
+
+.field-label {
+	color: var(--text);
+}
+
+.field-value {
+	color: var(--text-dim);
+	text-align: right;
+	font-family: var(--font-mono);
+}
+
+/* ===== Sidebar ===== */
+.sidebar-pane {
+	width: 300px;
+	flex-shrink: 0;
+	border-left: 1px solid var(--border);
+	overflow: hidden;
+	display: flex;
+}
+
+.sidebar {
+	width: 100%;
+	overflow-y: auto;
+	overflow-x: hidden;
+	background: var(--bg-light);
+}
+
+.sidebar-scroll {
+	padding: 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.sidebar-divider {
+	height: 1px;
+	background: var(--border);
+	margin: 4px 0;
+}
+
+/* scrollbar */
+.sidebar::-webkit-scrollbar,
+.inner-tab-content::-webkit-scrollbar {
+	width: 8px;
+}
+
+.sidebar::-webkit-scrollbar-track,
+.inner-tab-content::-webkit-scrollbar-track {
+	background: var(--scrollbar-bg);
+}
+
+.sidebar::-webkit-scrollbar-thumb,
+.inner-tab-content::-webkit-scrollbar-thumb {
+	background: var(--scrollbar-thumb);
+	border-radius: 4px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover,
+.inner-tab-content::-webkit-scrollbar-thumb:hover {
+	background: var(--scrollbar-thumb-hover);
+}
+
+/* ===== Panels ===== */
+.panel {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.panel-title {
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-bright);
+	margin-bottom: 2px;
+}
+
+.field-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.field-label {
+	font-size: 12px;
+	color: var(--text);
+	white-space: nowrap;
+}
+
+.field-input {
+	flex: 1;
+	min-width: 0;
+	padding: 3px 6px;
+	background: var(--input-bg);
+	border: 1px solid var(--input-border);
+	border-radius: 3px;
+	color: var(--input-text);
+	font-size: 12px;
+	font-family: var(--font);
+}
+
+.field-input:focus {
+	outline: none;
+	border-color: var(--accent-hover);
+}
+
+.field-input-narrow {
+	max-width: 60px;
+	flex: none;
+}
+
+select.field-input {
+	cursor: pointer;
+	appearance: none;
+	-webkit-appearance: none;
+	padding-right: 20px;
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
+	background-repeat: no-repeat;
+	background-position: right 6px center;
+}
+
+select.field-input option {
+	background: var(--bg-lighter);
+	color: var(--text);
+}
+
+.field-textarea {
+	width: 100%;
+	min-height: 60px;
+	padding: 4px 6px;
+	background: var(--input-bg);
+	border: 1px solid var(--input-border);
+	border-radius: 3px;
+	color: var(--input-text);
+	font-size: 11px;
+	font-family: var(--font-mono);
+	resize: none;
+}
+
+.datetime-row {
+	display: flex;
+	gap: 8px;
+}
+
+.datetime-group {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+/* ===== Buttons ===== */
+.panel-button,
+.generate-button,
+.simulation-button {
+	padding: 4px 12px;
+	background: var(--input-bg);
+	border: 1px solid var(--input-border);
+	border-radius: 3px;
+	color: var(--text);
+	font-size: 12px;
+	cursor: pointer;
+	text-align: center;
+	transition: background 0.1s;
+}
+
+.panel-button:hover,
+.generate-button:hover,
+.simulation-button:hover {
+	background: var(--bg-hover);
+}
+
+.panel-button:active,
+.generate-button:active,
+.simulation-button:active {
+	background: var(--accent);
+}
+
+.panel-button-sm {
+	padding: 2px 8px;
+	font-size: 11px;
+}
+
+.generate-button {
+	width: 100%;
+}
+
+.simulation-button {
+	width: 100%;
+	padding: 6px 12px;
+	font-weight: 600;
+}
+
+/* ===== Status Bar ===== */
+.statusbar {
+	height: 22px;
+	background: var(--accent);
+	color: white;
+	font-size: 11px;
+	display: flex;
+	align-items: center;
+	padding: 0 8px;
+	flex-shrink: 0;
+}
