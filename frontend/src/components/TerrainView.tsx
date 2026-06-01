@@ -30,9 +30,8 @@ export default function TerrainView({ elevation, status }: Props) {
 		const scene = new THREE.Scene();
 		scene.background = new THREE.Color(0x1e1e1e);
 
-		const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 10000);
-		camera.position.set(0, 500, 800);
-		camera.lookAt(0, 0, 0);
+		const camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100000);
+		camera.position.set(0, 5000, 8000);
 
 		const renderer = new THREE.WebGLRenderer({ antialias: true });
 		renderer.setSize(w, h);
@@ -48,10 +47,10 @@ export default function TerrainView({ elevation, status }: Props) {
 		const ambient = new THREE.AmbientLight(0x404060, 0.5);
 		scene.add(ambient);
 		const dir = new THREE.DirectionalLight(0xffffff, 1.2);
-		dir.position.set(500, 800, 300);
+		dir.position.set(5000, 8000, 3000);
 		scene.add(dir);
 		const dir2 = new THREE.DirectionalLight(0x8888ff, 0.3);
-		dir2.position.set(-300, -200, -400);
+		dir2.position.set(-3000, -2000, -4000);
 		scene.add(dir2);
 
 		sceneRef.current = { scene, camera, renderer, controls, mesh: null };
@@ -108,9 +107,16 @@ export default function TerrainView({ elevation, status }: Props) {
 		const hdata = elevation.height_data;
 		const rows = hdata.length;
 		const cols = hdata[0].length;
+		const b = elevation.bounds;
 		const minZ = elevation.min_elev;
 		const maxZ = elevation.max_elev;
 		const rangeZ = maxZ - minZ || 1;
+
+		// Real-world coordinates in meters — x/y/z are all meters, 1:1
+		const x0 = b.left;
+		const x1 = b.right;
+		const y0 = b.bottom;
+		const y1 = b.top;
 
 		// Build geometry
 		const geo = new THREE.BufferGeometry();
@@ -118,23 +124,20 @@ export default function TerrainView({ elevation, status }: Props) {
 		const colors: number[] = [];
 		const indices: number[] = [];
 
-		// Scale: map matrix coords to a unit space
-		const scaleX = 1;
-		const scaleZ = 1;
-
 		for (let r = 0; r < rows; r++) {
 			for (let c = 0; c < cols; c++) {
 				const z = hdata[r][c];
-				const x = (c / (cols - 1) - 0.5) * scaleX * cols;
-				const y = (r / (rows - 1) - 0.5) * scaleZ * rows * -1;
-				const elev = z;
-				vertices.push(x, elev, y);
+				const t_x = c / (cols - 1);
+				const t_y = r / (rows - 1);
+				const x = x0 + t_x * (x1 - x0);
+				const y = y0 + t_y * (y1 - y0);
+				vertices.push(x, z, y);
 
 				// Color based on elevation
-				const t = (elev - minZ) / rangeZ;
-				const rC = 0.2 + t * 0.8;
-				const gC = 0.3 + t * 0.5;
-				const bC = 0.1 + t * 0.3;
+				const t = (z - minZ) / rangeZ;
+				const rC = 0.15 + t * 0.85;
+				const gC = 0.25 + t * 0.55;
+				const bC = 0.10 + t * 0.25;
 				colors.push(rC, gC, bC);
 			}
 		}
@@ -168,10 +171,16 @@ export default function TerrainView({ elevation, status }: Props) {
 		ctx.mesh = mesh;
 
 		// Center camera on mesh
-		const center = new THREE.Vector3(0, (minZ + maxZ) / 2, 0);
-		ctx.controls.target.copy(center);
-		const maxDim = Math.max(cols, rows, rangeZ);
-		ctx.camera.position.set(maxDim * 0.6, maxDim * 0.5, maxDim * 0.6);
+		const cx = (x0 + x1) / 2;
+		const cy = (y0 + y1) / 2;
+		const cz = (minZ + maxZ) / 2;
+		ctx.controls.target.set(cx, cz, cy);
+
+		const width = x1 - x0;
+		const height = y1 - y0;
+		const maxDim = Math.max(width, height);
+		ctx.camera.position.set(cx, cz + maxDim * 0.6, cy - maxDim * 0.8);
+		ctx.camera.lookAt(cx, cz, cy);
 		ctx.controls.update();
 	}, [elevation, status]);
 
