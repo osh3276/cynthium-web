@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from services.pathfinding import compute_autopath
 from services.site_rasters import get_site_map, list_sites
 
 app = FastAPI(title="Cynthium API")
@@ -11,6 +13,14 @@ app.add_middleware(
 	allow_methods=["*"],
 	allow_headers=["*"],
 )
+
+
+class AutopathRequest(BaseModel):
+	waypoints_xy: list[list[float]]
+	min_slope_deg: float = 0.0
+	max_slope_deg: float = 20.0
+	slope_weight: float = 1.0
+	sun_weight: float = 0.5
 
 
 @app.get("/api/hello")
@@ -32,3 +42,18 @@ async def site_map(
 	if payload is None:
 		raise HTTPException(status_code=404, detail=f"Site '{site_name}' or map type '{map_type}' not found")
 	return payload
+
+
+@app.post("/api/sites/{site_name}/autopath")
+async def site_autopath(site_name: str, req: AutopathRequest):
+	result = compute_autopath(
+		site_name,
+		req.waypoints_xy,
+		min_slope_deg=req.min_slope_deg,
+		max_slope_deg=req.max_slope_deg,
+		slope_weight=req.slope_weight,
+		sun_weight=req.sun_weight,
+	)
+	if result is None:
+		raise HTTPException(status_code=400, detail="Autopath failed")
+	return result
