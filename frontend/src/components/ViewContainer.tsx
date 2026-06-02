@@ -1,16 +1,15 @@
 import { useCallback, useRef, useState } from "react";
 import MapView from "./MapView";
 import TerrainView from "./TerrainView";
-import type { ElevationPayload } from "../types";
+import type { MapPayload } from "../types";
 import type { LoadStatus } from "../App";
 
 interface Props {
-	elevation: ElevationPayload | null;
+	mapData: MapPayload | null;
 	status: LoadStatus;
-	errorMsg: string;
 }
 
-export default function ViewContainer({ elevation, status }: Props) {
+export default function ViewContainer({ mapData, status }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [splitPos, setSplitPos] = useState(50);
 
@@ -42,11 +41,11 @@ export default function ViewContainer({ elevation, status }: Props) {
 	return (
 		<div ref={containerRef} className="view-container">
 			<div className="view-pane" style={{ width: `${splitPos}%` }}>
-				<MapView elevation={elevation} status={status} />
+				<MapView mapData={mapData} status={status} />
 			</div>
 			<div className="view-handle" onMouseDown={handleMouseDown} />
 			<div className="view-pane" style={{ width: `${100 - splitPos}%` }}>
-				<TerrainView elevation={elevation} status={status} />
+				<TerrainView mapData={mapData} status={status} />
 			</div>
 		</div>
 	);

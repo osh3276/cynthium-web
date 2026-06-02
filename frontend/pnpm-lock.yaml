@@ -11,6 +11,9 @@ dependencies:
   react-dom:
     specifier: ^19.0.0
     version: 19.2.7(react@19.2.7)
+  react-zoom-pan-pinch:
+    specifier: ^4.0.3
+    version: 4.0.3(react-dom@19.2.7)(react@19.2.7)
   three:
     specifier: ^0.184.0
     version: 0.184.0
@@ -911,6 +914,17 @@ packages:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
     engines: {node: '>=0.10.0'}
     dev: true
+
+  /react-zoom-pan-pinch@4.0.3(react-dom@19.2.7)(react@19.2.7):
+    resolution: {integrity: sha512-N2Hi6L78fFmhRra+ORpFSW7WST5x6kxpOPplIvtB0b7b+U2anpo1z1wLgaWRPS2kUSqcraRG+JgBCIlDJnqqAg==}
+    engines: {node: '>=8', npm: '>=5'}
+    peerDependencies:
+      react: '*'
+      react-dom: '*'
+    dependencies:
+      react: 19.2.7
+      react-dom: 19.2.7(react@19.2.7)
+    dev: false
 
   /react@19.2.7:
     resolution: {integrity: sha512-HNe9WslTbXmFK8o8cmwgAeJFSBvt1bPdHCVKtaaV+WlAN36mpT4hcRpwbf3fY56ar2oIXzsBpOAiIRHAdY0OlQ==}

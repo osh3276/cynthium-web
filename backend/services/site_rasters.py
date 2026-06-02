@@ -13,6 +13,10 @@ from rasterio.windows import from_bounds
 HERE = Path(__file__).resolve().parent.parent
 CYNTHIUM_DATA_DIR = Path("/home/osh/Documents/code/cynthium/data")
 COARSE_ELEVATION_PATH = HERE / "data" / "elevation.tif"
+ILLUMINATION_PATH = HERE / "data" / "illumination.tif"
+METEOR_PATH = HERE / "data" / "meteor_energy.tif"
+SUMMER_TEMP_PATH = HERE / "data" / "summer-temp.tif"
+WINTER_TEMP_PATH = HERE / "data" / "winter-temp.tif"
 
 SITE_PRESET_FILES: dict[str, str] = {
     "Haworth": "Haworth_5mpp_surf.tif",
@@ -43,11 +47,26 @@ SITE_PRESET_FILES: dict[str, str] = {
     "de Gerlache-Kocher massif": "Site42_5mpp_surf.tif",
 }
 
+MAP_TYPE_KEYS = {
+    "elevation",
+    "slope",
+    "hillshade",
+    "solar_illumination_yr_avg",
+    "solar_illumination_day_avg",
+    "meteor_flux",
+    "average_temperature",
+}
+
 _site_bounds_cache: dict[str, dict] | None = None
 
 
+def _normalize_key(key: str) -> str:
+    key = key.strip().lower()
+    key = re.sub(r"[^a-z0-9]+", "_", key)
+    return re.sub(r"_+", "_", key).strip("_")
+
+
 def _load_site_bounds() -> dict[str, dict]:
-    """Read bounds from the 5mpp tiles once and cache them."""
     global _site_bounds_cache
     if _site_bounds_cache is not None:
         return _site_bounds_cache
@@ -74,7 +93,6 @@ def _load_site_bounds() -> dict[str, dict]:
 
 
 def list_sites() -> list[dict]:
-    """Return list of available sites with their bounds."""
     bounds = _load_site_bounds()
     sites = []
     for name, b in bounds.items():
@@ -83,33 +101,12 @@ def list_sites() -> list[dict]:
     return sites
 
 
-def _normalize_key(name: str) -> str:
-    key = name.strip().lower()
-    key = re.sub(r"[^a-z0-9]+", "_", key)
-    return re.sub(r"_+", "_", key).strip("_")
-
-
-def get_site_elevation(site_name: str) -> dict | None:
-    """Crop the coarse elevation map to the site bounds.
-
-    Returns a dict with:
-      - image_data: base64 PNG (color-mapped elevation)
-      - height_data: downsampled 2D array for 3D mesh
-      - shape: [rows, cols] of the cropped raster
-      - bounds: the crop bounds
-      - min_elev, max_elev: elevation range
-    """
-    bounds = _load_site_bounds()
-    if site_name not in bounds:
-        return None
-
-    b = bounds[site_name]
-    crop_bounds = (b["left"], b["bottom"], b["right"], b["top"])
-
-    with rasterio.open(str(COARSE_ELEVATION_PATH)) as src:
+def _crop_raster(source_path: Path, bounds: dict) -> tuple[np.ndarray, dict] | None:
+    """Crop a raster to the site bounds. Returns (data, meta) or None."""
+    crop_bounds = (bounds["left"], bounds["bottom"], bounds["right"], bounds["top"])
+    with rasterio.open(str(source_path)) as src:
         window = from_bounds(*crop_bounds, transform=src.transform)
         window = window.round_offsets().round_lengths()
-
         if window.width <= 0 or window.height <= 0:
             return None
 
@@ -117,80 +114,230 @@ def get_site_elevation(site_name: str) -> dict | None:
             1,
             window=window,
             boundless=True,
-            fill_value=src.nodata,
+            fill_value=src.nodata if src.nodata is not None else float("nan"),
         ).astype(np.float32)
 
         transform = src.window_transform(window)
-        out_bounds = rasterio.transform.array_bounds(
-            data.shape[0], data.shape[1], transform
-        )
-
-    # Mask out nodata
-    mask = np.isfinite(data)
-    if not np.any(mask):
-        return None
-
-    elev_min = float(np.min(data[mask]))
-    elev_max = float(np.max(data[mask]))
-    elev_range = elev_max - elev_min if elev_max > elev_min else 1.0
-
-    # --- Generate color-mapped PNG ---
-    norm = np.clip((data - elev_min) / elev_range, 0.0, 1.0)
-    colored = _apply_colormap(norm)
-
-    # Overlay transparency for nodata
-    colored[~mask] = 0
-    alpha = np.where(mask, 255, 0).astype(np.uint8)
-    rgba = np.dstack((colored, alpha))
-
-    img = Image.fromarray(rgba, "RGBA")
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    png_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-
-    # --- Downsample height data for 3D mesh ---
-    target = 200  # max dimension for mesh
-    h, w = data.shape
-    stride = max(1, int(max(h, w) / target))
-    downsampled = data[::stride, ::stride].copy()
-    downsampled[~np.isfinite(downsampled)] = elev_min  # fill nodata with min
-
-    payload = {
-        "image_data": png_b64,
-        "height_data": downsampled.tolist(),
-        "shape": list(data.shape),
-        "downsampled_shape": list(downsampled.shape),
-        "bounds": {
-            "left": float(out_bounds[0]),
-            "bottom": float(out_bounds[1]),
-            "right": float(out_bounds[2]),
-            "top": float(out_bounds[3]),
-        },
-        "min_elev": elev_min,
-        "max_elev": elev_max,
-    }
-    return payload
+        meta = {"transform": transform, "crs": src.crs, "bounds": src.bounds}
+    return data, meta
 
 
-_COLORMAP_CACHE: dict[str, np.ndarray] = {}
+def _hillshade(data: np.ndarray, az: float = 315, alt: float = 45) -> np.ndarray:
+    """Compute hillshade from elevation data."""
+    # Fill nodata for gradient computation
+    filled = np.where(np.isfinite(data), data, np.nan)
+
+    # Pad to handle edges
+    padded = np.pad(filled, 1, mode="edge")
+    x, y = np.gradient(padded, 40.0, 40.0)  # 40m resolution
+    x = x[1:-1, 1:-1]
+    y = y[1:-1, 1:-1]
+
+    az_rad = np.radians(az)
+    alt_rad = np.radians(alt)
+
+    # Hillshade formula
+    slope = np.arctan(np.sqrt(x**2 + y**2))
+    aspect = np.arctan2(-x, y)
+
+    shaded = np.sin(alt_rad) * np.cos(slope) + np.cos(alt_rad) * np.sin(slope) * np.cos(
+        az_rad - aspect
+    )
+    shaded = np.clip(shaded, 0, 1)
+    shaded[~np.isfinite(data)] = 0
+    return (shaded * 255).astype(np.uint8)
+
+
+def _slope_deg(data: np.ndarray) -> np.ndarray:
+    """Compute slope in degrees from elevation data."""
+    filled = np.where(np.isfinite(data), data, 0)
+    padded = np.pad(filled, 1, mode="edge")
+    x, y = np.gradient(padded, 40.0, 40.0)
+    x = x[1:-1, 1:-1]
+    y = y[1:-1, 1:-1]
+    slope = np.degrees(np.arctan(np.sqrt(x**2 + y**2)))
+    slope[~np.isfinite(data)] = 0
+    return slope
+
+
+_TERRAIN_STOPS = np.array([
+    [0.00, 0.05, 0.20, 0.40],
+    [0.25, 0.10, 0.40, 0.20],
+    [0.50, 0.30, 0.60, 0.20],
+    [0.70, 0.55, 0.40, 0.25],
+    [0.85, 0.75, 0.65, 0.50],
+    [1.00, 1.00, 1.00, 1.00],
+])
 
 
 def _apply_colormap(norm: np.ndarray) -> np.ndarray:
-    """Apply a terrain colormap (greens/browns/whites)."""
-    # Simple multi-stop gradient: blueish -> green -> brown -> white
-    stops = np.array([
-        [0.00, 0.05, 0.20, 0.40],   # deep blue
-        [0.25, 0.10, 0.40, 0.20],   # dark green
-        [0.50, 0.30, 0.60, 0.20],   # tan/green
-        [0.70, 0.55, 0.40, 0.25],   # brown
-        [0.85, 0.75, 0.65, 0.50],   # light brown
-        [1.00, 1.00, 1.00, 1.00],   # white
-    ])
-    pos = stops[:, 0]
-    colors = stops[:, 1:]
-
+    pos = _TERRAIN_STOPS[:, 0]
+    colors = _TERRAIN_STOPS[:, 1:]
     r = np.interp(norm, pos, colors[:, 0])
     g = np.interp(norm, pos, colors[:, 1])
     b = np.interp(norm, pos, colors[:, 2])
     rgb = np.stack([r, g, b], axis=-1)
     return (np.clip(rgb, 0, 1) * 255).astype(np.uint8)
+
+
+def _data_to_png(data: np.ndarray, colormap: bool = True) -> str:
+    """Convert a 2D array to a base64 PNG.
+
+    If colormap is True, use the terrain colormap.
+    If False, treat data as uint8 grayscale.
+    """
+    mask = np.isfinite(data)
+
+    if colormap:
+        dmin = float(np.min(data[mask])) if np.any(mask) else 0
+        dmax = float(np.max(data[mask])) if np.any(mask) else 1
+        drange = dmax - dmin if dmax > dmin else 1.0
+        norm = np.clip((data - dmin) / drange, 0.0, 1.0)
+        colored = _apply_colormap(norm)
+        colored[~mask] = 0
+        alpha = np.where(mask, 255, 0).astype(np.uint8)
+        rgba = np.dstack((colored, alpha))
+        img = Image.fromarray(rgba, "RGBA")
+    else:
+        gray = np.where(mask, data.astype(np.uint8), 0)
+        alpha = np.where(mask, 255, 0).astype(np.uint8)
+        rgba = np.dstack((gray, gray, gray, alpha))
+        img = Image.fromarray(rgba, "RGBA")
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+def get_site_map(site_name: str, map_type: str = "Elevation") -> dict | None:
+    """Crop the appropriate raster to the site bounds and return display data.
+
+    Returns:
+      - image_data: base64 PNG
+      - value_range: [min, max] for the data
+      - shape: [rows, cols]
+      - bounds: crop bounds
+      - label: human-readable layer name
+    """
+    bounds = _load_site_bounds()
+    if site_name not in bounds:
+        return None
+
+    b = bounds[site_name]
+    map_key = _normalize_key(map_type)
+
+    # Determine which raster to use
+    if map_key == "elevation":
+        cropped = _crop_raster(COARSE_ELEVATION_PATH, b)
+        if cropped is None:
+            return None
+        data, meta = cropped
+        label = "Elevation"
+        png = _data_to_png(data, colormap=True)
+        # Downsample for 3D mesh
+        h, w = data.shape
+        target = 200
+        stride = max(1, int(max(h, w) / target))
+        ds = data[::stride, ::stride].copy()
+        ds[~np.isfinite(ds)] = float(np.nanmin(ds)) if np.any(np.isfinite(ds)) else 0
+
+    elif map_key == "slope":
+        cropped = _crop_raster(COARSE_ELEVATION_PATH, b)
+        if cropped is None:
+            return None
+        elev, _ = cropped
+        data = _slope_deg(elev)
+        label = "Slope (deg)"
+        png = _data_to_png(data, colormap=True)
+
+    elif map_key == "hillshade":
+        cropped = _crop_raster(COARSE_ELEVATION_PATH, b)
+        if cropped is None:
+            return None
+        elev, _ = cropped
+        data = _hillshade(elev).astype(np.float32)
+        label = "Hillshade"
+        png = _data_to_png(data, colormap=False)
+
+    elif map_key in ("solar_illumination_yr_avg", "solar_illumination"):
+        cropped = _crop_raster(ILLUMINATION_PATH, b)
+        if cropped is None:
+            return None
+        data, meta = cropped
+        label = "Solar Illumination"
+        png = _data_to_png(data, colormap=True)
+
+    elif map_key in ("solar_illumination_day_avg",):
+        # Use yearly avg as fallback for now
+        cropped = _crop_raster(ILLUMINATION_PATH, b)
+        if cropped is None:
+            return None
+        data, meta = cropped
+        label = "Solar Illumination (day avg.)"
+        png = _data_to_png(data, colormap=True)
+
+    elif map_key == "meteor_flux":
+        cropped = _crop_raster(METEOR_PATH, b)
+        if cropped is None:
+            return None
+        data, meta = cropped
+        label = "Meteor Flux"
+        png = _data_to_png(data, colormap=True)
+
+    elif map_key == "average_temperature":
+        summer = _crop_raster(SUMMER_TEMP_PATH, b)
+        winter = _crop_raster(WINTER_TEMP_PATH, b)
+        if summer is None and winter is None:
+            return None
+        s_data = summer[0] if summer else None
+        w_data = winter[0] if winter else None
+        if s_data is not None and w_data is not None:
+            data = (s_data + w_data) / 2.0
+        elif s_data is not None:
+            data = s_data
+        else:
+            data = w_data
+        label = "Avg Temperature"
+        png = _data_to_png(data, colormap=True)
+
+    else:
+        return None
+
+    mask = np.isfinite(data)
+    dmin = float(np.min(data[mask])) if np.any(mask) else 0
+    dmax = float(np.max(data[mask])) if np.any(mask) else 0
+
+    payload: dict = {
+        "image_data": png,
+        "value_range": [dmin, dmax],
+        "shape": list(data.shape),
+        "bounds": {
+            "left": b["left"],
+            "bottom": b["bottom"],
+            "right": b["right"],
+            "top": b["top"],
+        },
+        "label": label,
+        "map_type": map_type,
+    }
+
+    # Always include terrain height data (cropped from elevation.tif)
+    elev_cropped = _crop_raster(COARSE_ELEVATION_PATH, b)
+    if elev_cropped is not None:
+        elev_data, _ = elev_cropped
+        h, w = elev_data.shape
+        target = 200
+        stride = max(1, int(max(h, w) / target))
+        ds = elev_data[::stride, ::stride].copy()
+        mask = np.isfinite(ds)
+        if np.any(mask):
+            fill_val = float(np.nanmin(ds[mask]))
+        else:
+            fill_val = 0.0
+        ds[~mask] = fill_val
+        payload["height_data"] = ds.tolist()
+        payload["downsampled_shape"] = list(ds.shape)
+        payload["min_elev"] = float(np.min(ds))
+        payload["max_elev"] = float(np.max(ds))
+
+    return payload

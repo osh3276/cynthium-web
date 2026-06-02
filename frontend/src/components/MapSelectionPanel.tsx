@@ -3,7 +3,7 @@ import { MAP_TYPES, SITE_PRESETS } from "../constants";
 import type { LoadStatus } from "../App";
 
 interface Props {
-	onLoadSite: (siteName: string) => void;
+	onLoadSite: (siteName: string, mapType: string) => void;
 	status: LoadStatus;
 }
 
@@ -16,8 +16,8 @@ export default function MapSelectionPanel({ onLoadSite, status }: Props) {
 
 	const handleGenerate = useCallback(() => {
 		if (!selectedSite) return;
-		onLoadSite(selectedSite);
-	}, [selectedSite, onLoadSite]);
+		onLoadSite(selectedSite, selectedMapType);
+	}, [selectedSite, selectedMapType, onLoadSite]);
 
 	return (
 		<div className="panel">

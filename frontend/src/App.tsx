@@ -3,26 +3,27 @@ import MenuBar from "./components/MenuBar";
 import ViewContainer from "./components/ViewContainer";
 import SimulationResultsPanel from "./components/SimulationResultsPanel";
 import Sidebar from "./components/Sidebar";
-import { type ElevationPayload } from "./types";
+import { type MapPayload } from "./types";
 import "./App.css";
 
 export type LoadStatus = "idle" | "loading" | "loaded" | "error";
 
 function App() {
-	const [elevation, setElevation] = useState<ElevationPayload | null>(null);
+	const [mapData, setMapData] = useState<MapPayload | null>(null);
 	const [status, setStatus] = useState<LoadStatus>("idle");
 	const [errorMsg, setErrorMsg] = useState("");
 
-	const handleLoadSite = useCallback(async (siteName: string) => {
+	const handleLoadSite = useCallback(async (siteName: string, mapType: string) => {
 		setStatus("loading");
 		setErrorMsg("");
 		try {
-			const res = await fetch(`/api/sites/${encodeURIComponent(siteName)}/elevation`);
+			const params = new URLSearchParams({ map_type: mapType });
+			const res = await fetch(`/api/sites/${encodeURIComponent(siteName)}/map?${params}`);
 			if (!res.ok) {
 				throw new Error(await res.text());
 			}
-			const data: ElevationPayload = await res.json();
-			setElevation(data);
+			const data: MapPayload = await res.json();
+			setMapData(data);
 			setStatus("loaded");
 		} catch (err) {
 			setStatus("error");
@@ -36,8 +37,8 @@ function App() {
 			<div className="main-content">
 				<div className="left-pane">
 					<div className="view-area">
-						<ViewContainer elevation={elevation} status={status} errorMsg={errorMsg} />
-											{status === "error" && <div className="view-error">{errorMsg}</div>}
+						<ViewContainer mapData={mapData} status={status} />
+						{status === "error" && <div className="view-error">{errorMsg}</div>}
 					</div>
 					<div className="results-area">
 						<SimulationResultsPanel />

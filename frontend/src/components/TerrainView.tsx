@@ -1,15 +1,15 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { ElevationPayload } from "../types";
+import type { MapPayload } from "../types";
 import type { LoadStatus } from "../App";
 
 interface Props {
-	elevation: ElevationPayload | null;
+	mapData: MapPayload | null;
 	status: LoadStatus;
 }
 
-export default function TerrainView({ elevation, status }: Props) {
+export default function TerrainView({ mapData, status }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const sceneRef = useRef<{
 		scene: THREE.Scene;
@@ -19,7 +19,6 @@ export default function TerrainView({ elevation, status }: Props) {
 		mesh: THREE.Mesh | null;
 	} | null>(null);
 
-	// Initialize Three.js scene once
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container || sceneRef.current) return;
@@ -43,7 +42,6 @@ export default function TerrainView({ elevation, status }: Props) {
 		controls.dampingFactor = 0.1;
 		controls.target.set(0, 0, 0);
 
-		// Lights
 		const ambient = new THREE.AmbientLight(0x404060, 0.5);
 		scene.add(ambient);
 		const dir = new THREE.DirectionalLight(0xffffff, 1.2);
@@ -55,7 +53,6 @@ export default function TerrainView({ elevation, status }: Props) {
 
 		sceneRef.current = { scene, camera, renderer, controls, mesh: null };
 
-		// Animation loop
 		let running = true;
 		const animate = () => {
 			if (!running) return;
@@ -65,7 +62,6 @@ export default function TerrainView({ elevation, status }: Props) {
 		};
 		animate();
 
-		// Resize
 		const onResize = () => {
 			if (!container || !sceneRef.current) return;
 			const w2 = container.clientWidth;
@@ -85,12 +81,10 @@ export default function TerrainView({ elevation, status }: Props) {
 		};
 	}, []);
 
-	// Update mesh when elevation data changes
 	useEffect(() => {
 		const ctx = sceneRef.current;
 		if (!ctx) return;
 
-		// Remove old mesh
 		if (ctx.mesh) {
 			ctx.scene.remove(ctx.mesh);
 			ctx.mesh.geometry.dispose();
@@ -102,26 +96,23 @@ export default function TerrainView({ elevation, status }: Props) {
 			ctx.mesh = null;
 		}
 
-		if (!elevation || status !== "loaded") return;
+		if (!mapData || status !== "loaded" || !mapData.height_data) return;
 
-		const hdata = elevation.height_data;
+		const hdata = mapData.height_data;
 		const rows = hdata.length;
 		const cols = hdata[0].length;
-		const b = elevation.bounds;
-		const minZ = elevation.min_elev;
-		const maxZ = elevation.max_elev;
+		const b = mapData.bounds;
+		const minZ = mapData.min_elev ?? 0;
+		const maxZ = mapData.max_elev ?? 1;
 		const rangeZ = maxZ - minZ || 1;
 
-		// Real-world coordinates in meters — x/y/z are all meters, 1:1
 		const x0 = b.left;
 		const x1 = b.right;
 		const y0 = b.bottom;
 		const y1 = b.top;
 
-		// Build geometry
 		const geo = new THREE.BufferGeometry();
 		const vertices: number[] = [];
-		const colors: number[] = [];
 		const indices: number[] = [];
 
 		for (let r = 0; r < rows; r++) {
@@ -132,13 +123,6 @@ export default function TerrainView({ elevation, status }: Props) {
 				const x = x0 + t_x * (x1 - x0);
 				const y = y0 + t_y * (y1 - y0);
 				vertices.push(x, z, y);
-
-				// Color based on elevation
-				const t = (z - minZ) / rangeZ;
-				const rC = 0.15 + t * 0.85;
-				const gC = 0.25 + t * 0.55;
-				const bC = 0.10 + t * 0.25;
-				colors.push(rC, gC, bC);
 			}
 		}
 
@@ -148,18 +132,16 @@ export default function TerrainView({ elevation, status }: Props) {
 				const j = r * cols + c + 1;
 				const k = (r + 1) * cols + c;
 				const l = (r + 1) * cols + c + 1;
-				indices.push(i, j, k);
-				indices.push(j, l, k);
+				indices.push(i, j, k, j, l, k);
 			}
 		}
 
 		geo.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
-		geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
 		geo.setIndex(indices);
 		geo.computeVertexNormals();
 
 		const mat = new THREE.MeshStandardMaterial({
-			vertexColors: true,
+			color: 0xbbbbbb,
 			flatShading: false,
 			side: THREE.DoubleSide,
 			roughness: 0.6,
@@ -170,7 +152,6 @@ export default function TerrainView({ elevation, status }: Props) {
 		ctx.scene.add(mesh);
 		ctx.mesh = mesh;
 
-		// Center camera on mesh
 		const cx = (x0 + x1) / 2;
 		const cy = (y0 + y1) / 2;
 		const cz = (minZ + maxZ) / 2;
@@ -182,12 +163,15 @@ export default function TerrainView({ elevation, status }: Props) {
 		ctx.camera.position.set(cx, cz + maxDim * 0.6, cy - maxDim * 0.8);
 		ctx.camera.lookAt(cx, cz, cy);
 		ctx.controls.update();
-	}, [elevation, status]);
+	}, [mapData, status]);
 
 	return (
 		<div ref={containerRef} className="terrain-view">
 			{status === "idle" && (
-				<div className="map-placeholder">
+				<div className="map-placeholder" style={{
+					position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+					alignItems: "center", justifyContent: "center", pointerEvents: "none",
+				}}>
 					<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
 						<path d="M4 15l4-4 5 5 5-5 2 2" />
 						<path d="M2 4v16a2 2 0 002 2h16a2 2 0 002-2V4a2 2 0 00-2-2H4a2 2 0 00-2 2z" />
@@ -195,9 +179,9 @@ export default function TerrainView({ elevation, status }: Props) {
 					<span>3D Terrain View</span>
 				</div>
 			)}
-			{status === "loaded" && elevation && (
+			{mapData?.height_data && status === "loaded" && (
 				<div className="view-overlay top-left">
-					Terrain ({elevation.downsampled_shape[0]}×{elevation.downsampled_shape[1]})
+					Terrain ({mapData.downsampled_shape?.[0]}×{mapData.downsampled_shape?.[1]})
 				</div>
 			)}
 		</div>
