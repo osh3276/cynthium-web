@@ -13,17 +13,21 @@ export interface SiteInfo extends SiteBounds {
 	name: string;
 }
 
-export interface ElevationPayload {
+export interface MapPayload {
 	image_data: string; // base64 PNG
-	height_data: number[][]; // 2D array
-	shape: number[]; // [rows, cols] of cropped raster
-	downsampled_shape: number[];
+	value_range: [number, number]; // [min, max] displayed values
+	shape: number[];
 	bounds: {
 		left: number;
 		bottom: number;
 		right: number;
 		top: number;
 	};
-	min_elev: number;
-	max_elev: number;
+	label: string;
+	map_type: string;
+	// Only present for "Elevation" type
+	height_data?: number[][];
+	downsampled_shape?: number[];
+	min_elev?: number;
+	max_elev?: number;
 }

@@ -4,7 +4,7 @@ import RoverSettingsPanel from "./RoverSettingsPanel";
 import type { LoadStatus } from "../App";
 
 interface Props {
-	onLoadSite: (siteName: string) => void;
+	onLoadSite: (siteName: string, mapType: string) => void;
 	status: LoadStatus;
 }
 
