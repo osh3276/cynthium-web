@@ -205,6 +205,8 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 		const mesh = ctx.mesh;
 		if (!mesh) return;
 
+		const Z_OFFSET = 5;
+
 		// Add waypoint spheres
 		const sphereGeo = new THREE.SphereGeometry(40, 12, 12);
 		const sphereMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x4488ff, emissiveIntensity: 0.3 });
@@ -215,12 +217,9 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 			ctx.wpGroup.add(s);
 		});
 
-		// Manual path line
+		// Manual path line — sample surface between waypoints
 		if (waypoints.length > 1) {
-			const pts = waypoints.map((wp) => {
-				const z = _sampleHeight(wp.x, wp.y, mapData!);
-				return new THREE.Vector3(wp.x, z + 5, wp.y);
-			});
+			const pts = _surfaceLine(waypoints, mapData, Z_OFFSET);
 			const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
 			const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
 			const line = new THREE.Line(lineGeo, lineMat);
@@ -228,12 +227,13 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 			ctx.pathLine = line;
 		}
 
-		// Autopath line
+		// Autopath line — sample surface along path
 		if (autopathResult && autopathResult.path_xy.length > 1) {
-			const pts = autopathResult.path_xy.map((p) => {
-				const z = _sampleHeight(p[0], p[1], mapData!);
-				return new THREE.Vector3(p[0], z + 5, p[1]);
-			});
+			const pts = _surfaceLine(
+				autopathResult.path_xy.map((p) => ({ x: p[0], y: p[1] })),
+				mapData,
+				Z_OFFSET,
+			);
 			const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
 			const lineMat = new THREE.LineBasicMaterial({ color: 0x4fc3f7, linewidth: 2 });
 			const line = new THREE.Line(lineGeo, lineMat);
@@ -277,4 +277,46 @@ function _sampleHeight(x: number, y: number, mapData: MapPayload): number {
 	const r = Math.round((1 - ty) * (rows - 1));
 	if (r < 0 || r >= rows || c < 0 || c >= cols) return 0;
 	return hdata[r][c];
+}
+
+/** Densely sample the terrain surface between consecutive waypoints so the
+ *  line follows the mesh instead of cutting through it. */
+function _surfaceLine(
+	points: { x: number; y: number }[],
+	mapData: MapPayload,
+	zOffset: number,
+): THREE.Vector3[] {
+	const hdata = mapData.height_data!;
+	const rows = hdata.length;
+	const cols = hdata[0].length;
+	const b = mapData.bounds;
+	const cellW = (b.right - b.left) / (cols - 1);
+	const cellH = (b.top - b.bottom) / (rows - 1);
+	const step = Math.min(cellW, cellH);
+
+	const result: THREE.Vector3[] = [];
+
+	for (let i = 0; i < points.length; i++) {
+		const a = points[i];
+		const b = points[i + 1];
+		const z = _sampleHeight(a.x, a.y, mapData);
+		result.push(new THREE.Vector3(a.x, z + zOffset, a.y));
+
+		if (!b) continue;
+
+		const dx = b.x - a.x;
+		const dy = b.y - a.y;
+		const dist = Math.sqrt(dx * dx + dy * dy);
+		const n = Math.max(1, Math.ceil(dist / step));
+
+		for (let s = 1; s < n; s++) {
+			const t = s / n;
+			const sx = a.x + t * dx;
+			const sy = a.y + t * dy;
+			const sz = _sampleHeight(sx, sy, mapData);
+			result.push(new THREE.Vector3(sx, sz + zOffset, sy));
+		}
+	}
+
+	return result;
 }
