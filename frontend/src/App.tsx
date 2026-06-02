@@ -18,11 +18,14 @@ function App() {
 	const [autopathRunning, setAutopathRunning] = useState(false);
 
 	const handleLoadSite = useCallback(async (siteName: string, mapType: string) => {
+		const sameSite = siteName === currentSite;
 		setCurrentSite(siteName);
 		setStatus("loading");
 		setErrorMsg("");
-		setWaypoints([]);
-		setAutopathResult(null);
+		if (!sameSite) {
+			setWaypoints([]);
+			setAutopathResult(null);
+		}
 		try {
 			const params = new URLSearchParams({ map_type: mapType });
 			const res = await fetch(`/api/sites/${encodeURIComponent(siteName)}/map?${params}`);

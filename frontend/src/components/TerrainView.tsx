@@ -13,6 +13,7 @@ interface Props {
 
 export default function TerrainView({ mapData, status, waypoints, autopathResult }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
+	const prevShapeKey = useRef<string | null>(null);
 	const sceneRef = useRef<{
 		scene: THREE.Scene;
 		camera: THREE.PerspectiveCamera;
@@ -106,6 +107,11 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 		}
 
 		if (!mapData || status !== "loaded" || !mapData.height_data) return;
+
+		// Skip mesh rebuild if terrain shape hasn't changed (e.g. switching map type)
+		const shapeKey = mapData.downsampled_shape?.join(",") ?? "";
+		if (shapeKey === prevShapeKey.current && ctx.mesh) return;
+		prevShapeKey.current = shapeKey;
 
 		const hdata = mapData.height_data;
 		const rows = hdata.length;
