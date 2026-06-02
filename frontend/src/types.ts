@@ -14,8 +14,8 @@ export interface SiteInfo extends SiteBounds {
 }
 
 export interface MapPayload {
-	image_data: string; // base64 PNG
-	value_range: [number, number]; // [min, max] displayed values
+	image_data: string;
+	value_range: [number, number];
 	shape: number[];
 	bounds: {
 		left: number;
@@ -25,9 +25,26 @@ export interface MapPayload {
 	};
 	label: string;
 	map_type: string;
-	// Only present for "Elevation" type
 	height_data?: number[][];
 	downsampled_shape?: number[];
 	min_elev?: number;
 	max_elev?: number;
+}
+
+export interface Waypoint {
+	x: number;
+	y: number;
+}
+
+export interface AutopathResult {
+	path_xy: number[][];
+	total_cost: number;
+	expanded: number;
+}
+
+export interface AutopathConfig {
+	min_slope_deg: number;
+	max_slope_deg: number;
+	slope_weight: number;
+	sun_weight: number;
 }
