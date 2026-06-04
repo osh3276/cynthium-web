@@ -29,6 +29,8 @@ export interface MapPayload {
 	downsampled_shape?: number[];
 	min_elev?: number;
 	max_elev?: number;
+	sun_azimuth?: number;
+	sun_elevation?: number;
 }
 
 export interface Waypoint {
@@ -47,4 +49,15 @@ export interface AutopathConfig {
 	max_slope_deg: number;
 	slope_weight: number;
 	sun_weight: number;
+}
+
+export interface RoverSettings {
+	mass_kg: number;
+	power_hp: number;
+	wheel_friction_coeff: number;
+	rolling_resistance_coeff: number;
+}
+
+export interface SimulationStats {
+	[key: string]: number;
 }

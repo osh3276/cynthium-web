@@ -11,6 +11,10 @@ interface Props {
 	autopathResult: AutopathResult | null;
 }
 
+function reflectX(x: number, b: { left: number; right: number }): number {
+	return b.left + b.right - x;
+}
+
 export default function TerrainView({ mapData, status, waypoints, autopathResult }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const prevShapeKey = useRef<string | null>(null);
@@ -20,6 +24,7 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 		renderer: THREE.WebGLRenderer;
 		controls: OrbitControls;
 		mesh: THREE.Mesh | null;
+		sunLight: THREE.DirectionalLight;
 		wpGroup: THREE.Group;
 		pathLine: THREE.Line | null;
 		autoLine: THREE.Line | null;
@@ -48,19 +53,19 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 		controls.dampingFactor = 0.1;
 		controls.target.set(0, 0, 0);
 
-		const ambient = new THREE.AmbientLight(0x404060, 0.5);
+		const ambient = new THREE.AmbientLight(0x000000, 0.3);
 		scene.add(ambient);
-		const dir = new THREE.DirectionalLight(0xffffff, 1.2);
-		dir.position.set(5000, 8000, 3000);
-		scene.add(dir);
-		const dir2 = new THREE.DirectionalLight(0x8888ff, 0.3);
-		dir2.position.set(-3000, -2000, -4000);
-		scene.add(dir2);
+		const sunLight = new THREE.DirectionalLight(0xffffff, 10);
+		sunLight.position.set(5000, 8000, 3000);
+		scene.add(sunLight);
+		const fillLight = new THREE.DirectionalLight(0x8888ff, 0.2);
+		fillLight.position.set(-3000, -2000, -4000);
+		scene.add(fillLight);
 
 		const wpGroup = new THREE.Group();
 		scene.add(wpGroup);
 
-		sceneRef.current = { scene, camera, renderer, controls, mesh: null, wpGroup, pathLine: null, autoLine: null };
+		sceneRef.current = { scene, camera, renderer, controls, mesh: null, sunLight, wpGroup, pathLine: null, autoLine: null };
 
 		let running = true;
 		const animate = () => {
@@ -108,7 +113,6 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 
 		if (!mapData || status !== "loaded" || !mapData.height_data) return;
 
-		// Skip mesh rebuild if terrain shape hasn't changed (e.g. switching map type)
 		const shapeKey = mapData.downsampled_shape?.join(",") ?? "";
 		if (shapeKey === prevShapeKey.current && ctx.mesh) return;
 		prevShapeKey.current = shapeKey;
@@ -132,11 +136,10 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 		for (let r = 0; r < rows; r++) {
 			for (let c = 0; c < cols; c++) {
 				const z = hdata[r][c];
-				const t_x = c / (cols - 1);
-				// hdata rows go north→south (row 0 = top), so flip Y:
-				// row 0 → y1 (top), row rows-1 → y0 (bottom)
-				const t_y = (rows - 1 - r) / (rows - 1);
-				vertices.push(x0 + t_x * (x1 - x0), z, y0 + t_y * (y1 - y0));
+				const t = c / (cols - 1);
+				const ty = (rows - 1 - r) / (rows - 1);
+				// Reflect X to match 2D map orientation
+				vertices.push(x1 - t * (x1 - x0), z, y0 + ty * (y1 - y0));
 			}
 		}
 
@@ -155,7 +158,7 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 		geo.computeVertexNormals();
 
 		const mat = new THREE.MeshStandardMaterial({
-			color: 0x666666,
+			color: 0x878787,
 			flatShading: false,
 			side: THREE.DoubleSide,
 			roughness: 0.8,
@@ -176,12 +179,29 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 		ctx.controls.update();
 	}, [mapData, status]);
 
+	// Update sun light direction from sun position
+	useEffect(() => {
+		const ctx = sceneRef.current;
+		if (!ctx || !mapData) return;
+		const az = mapData.sun_azimuth;
+		const el = mapData.sun_elevation;
+		if (az == null || el == null) return;
+
+		const azRad = (az * Math.PI) / 180;
+		const elRad = (el * Math.PI) / 180;
+		const dist = 20000;
+		ctx.sunLight.position.set(
+			Math.sin(azRad) * Math.cos(elRad) * dist,
+			Math.sin(elRad) * dist,
+			Math.cos(azRad) * Math.cos(elRad) * dist,
+		);
+	}, [mapData?.sun_azimuth, mapData?.sun_elevation]);
+
 	// Update waypoints and paths
 	useEffect(() => {
 		const ctx = sceneRef.current;
 		if (!ctx) return;
 
-		// Clear old waypoints
 		while (ctx.wpGroup.children.length > 0) {
 			const child = ctx.wpGroup.children[0];
 			if (child instanceof THREE.Mesh) {
@@ -192,7 +212,6 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 			ctx.wpGroup.remove(child);
 		}
 
-		// Clear path lines
 		if (ctx.pathLine) {
 			ctx.scene.remove(ctx.pathLine);
 			ctx.pathLine.geometry.dispose();
@@ -211,21 +230,20 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 		const mesh = ctx.mesh;
 		if (!mesh) return;
 
+		const b = mapData.bounds;
 		const Z_OFFSET = 5;
 
-		// Add waypoint spheres
 		const sphereGeo = new THREE.SphereGeometry(40, 12, 12);
 		const sphereMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x4488ff, emissiveIntensity: 0.3 });
 		waypoints.forEach((wp) => {
 			const s = new THREE.Mesh(sphereGeo, sphereMat);
 			const z = _sampleHeight(wp.x, wp.y, mapData!);
-			s.position.set(wp.x, z + 20, wp.y);
+			s.position.set(reflectX(wp.x, b), z + 20, wp.y);
 			ctx.wpGroup.add(s);
 		});
 
-		// Manual path line — sample surface between waypoints
 		if (waypoints.length > 1) {
-			const pts = _surfaceLine(waypoints, mapData, Z_OFFSET);
+			const pts = _surfaceLine(waypoints, mapData, Z_OFFSET, reflectX);
 			const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
 			const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
 			const line = new THREE.Line(lineGeo, lineMat);
@@ -233,12 +251,12 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 			ctx.pathLine = line;
 		}
 
-		// Autopath line — sample surface along path
 		if (autopathResult && autopathResult.path_xy.length > 1) {
 			const pts = _surfaceLine(
 				autopathResult.path_xy.map((p) => ({ x: p[0], y: p[1] })),
 				mapData,
 				Z_OFFSET,
+				reflectX,
 			);
 			const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
 			const lineMat = new THREE.LineBasicMaterial({ color: 0x4fc3f7, linewidth: 2 });
@@ -285,12 +303,11 @@ function _sampleHeight(x: number, y: number, mapData: MapPayload): number {
 	return hdata[r][c];
 }
 
-/** Densely sample the terrain surface between consecutive waypoints so the
- *  line follows the mesh instead of cutting through it. */
 function _surfaceLine(
 	points: { x: number; y: number }[],
 	mapData: MapPayload,
 	zOffset: number,
+	refFn: (x: number, b: { left: number; right: number }) => number,
 ): THREE.Vector3[] {
 	const hdata = mapData.height_data!;
 	const rows = hdata.length;
@@ -304,14 +321,14 @@ function _surfaceLine(
 
 	for (let i = 0; i < points.length; i++) {
 		const a = points[i];
-		const b = points[i + 1];
 		const z = _sampleHeight(a.x, a.y, mapData);
-		result.push(new THREE.Vector3(a.x, z + zOffset, a.y));
+		result.push(new THREE.Vector3(refFn(a.x, b), z + zOffset, a.y));
 
-		if (!b) continue;
+		const next = points[i + 1];
+		if (!next) continue;
 
-		const dx = b.x - a.x;
-		const dy = b.y - a.y;
+		const dx = next.x - a.x;
+		const dy = next.y - a.y;
 		const dist = Math.sqrt(dx * dx + dy * dy);
 		const n = Math.max(1, Math.ceil(dist / step));
 
@@ -320,7 +337,7 @@ function _surfaceLine(
 			const sx = a.x + t * dx;
 			const sy = a.y + t * dy;
 			const sz = _sampleHeight(sx, sy, mapData);
-			result.push(new THREE.Vector3(sx, sz + zOffset, sy));
+			result.push(new THREE.Vector3(refFn(sx, b), sz + zOffset, sy));
 		}
 	}
 

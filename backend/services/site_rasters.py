@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 import rasterio
 from PIL import Image
+from pyproj import Transformer
 from rasterio.windows import from_bounds
 
 HERE = Path(__file__).resolve().parent.parent
@@ -58,6 +59,22 @@ MAP_TYPE_KEYS = {
 }
 
 _site_bounds_cache: dict[str, dict] | None = None
+
+_STERE_CRS = "+proj=stere +lat_0=-90 +lon_0=0 +k=1 +x_0=0 +y_0=0 +a=1737400 +b=1737400 +units=m"
+_LONGLAT_CRS = "+proj=longlat +a=1737400 +b=1737400"
+_to_lonlat = Transformer.from_crs(_STERE_CRS, _LONGLAT_CRS, always_xy=True)
+
+
+def get_site_center_lonlat(site_name: str) -> tuple[float, float] | None:
+	"""Return (lon, lat) of the site center in selenographic degrees."""
+	bounds = _load_site_bounds()
+	if site_name not in bounds:
+		return None
+	b = bounds[site_name]
+	cx = (b["left"] + b["right"]) / 2.0
+	cy = (b["bottom"] + b["top"]) / 2.0
+	lon, lat = _to_lonlat.transform(cx, cy)
+	return float(lon), float(lat)
 
 
 def _normalize_key(key: str) -> str:
