@@ -1,11 +1,22 @@
-const ROVER_DEFAULTS = {
-	mass: "150.0",
-	power: "0.2",
-	friction: "0.6",
-	crr: "0.1",
-};
+import { useCallback } from "react";
+import type { RoverSettings } from "../types";
 
-export default function RoverSettingsPanel() {
+interface Props {
+	settings: RoverSettings;
+	onChange: (settings: RoverSettings) => void;
+}
+
+export default function RoverSettingsPanel({ settings, onChange }: Props) {
+	const handleChange = useCallback(
+		(field: keyof RoverSettings) => (e: React.ChangeEvent<HTMLInputElement>) => {
+			const val = parseFloat(e.target.value);
+			if (!isNaN(val) && val > 0) {
+				onChange({ ...settings, [field]: val });
+			}
+		},
+		[settings, onChange],
+	);
+
 	return (
 		<div className="panel">
 			<h3 className="panel-title">Rover Settings</h3>
@@ -15,8 +26,8 @@ export default function RoverSettingsPanel() {
 				<input
 					className="field-input"
 					type="text"
-					placeholder="kg"
-					defaultValue={ROVER_DEFAULTS.mass}
+					value={settings.mass_kg}
+					onChange={handleChange("mass_kg")}
 				/>
 			</div>
 
@@ -25,8 +36,8 @@ export default function RoverSettingsPanel() {
 				<input
 					className="field-input"
 					type="text"
-					placeholder="hp"
-					defaultValue={ROVER_DEFAULTS.power}
+					value={settings.power_hp}
+					onChange={handleChange("power_hp")}
 				/>
 			</div>
 
@@ -35,8 +46,8 @@ export default function RoverSettingsPanel() {
 				<input
 					className="field-input"
 					type="text"
-					placeholder="mu"
-					defaultValue={ROVER_DEFAULTS.friction}
+					value={settings.wheel_friction_coeff}
+					onChange={handleChange("wheel_friction_coeff")}
 				/>
 			</div>
 
@@ -45,8 +56,8 @@ export default function RoverSettingsPanel() {
 				<input
 					className="field-input"
 					type="text"
-					placeholder="crr"
-					defaultValue={ROVER_DEFAULTS.crr}
+					value={settings.rolling_resistance_coeff}
+					onChange={handleChange("rolling_resistance_coeff")}
 				/>
 			</div>
 		</div>

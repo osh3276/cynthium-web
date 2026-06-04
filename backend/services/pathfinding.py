@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -12,6 +13,50 @@ from .site_rasters import COARSE_ELEVATION_PATH, ILLUMINATION_PATH, _load_site_b
 from .theta_star import theta_star
 
 HERE = Path(__file__).resolve().parent.parent
+_SNAP_RADIUS = 50
+_MIN_TRAV_NEIGHBORS = 3
+
+
+def _snap_to_traversable(
+	rc: tuple[int, int],
+	traversable: np.ndarray,
+	max_radius: int = _SNAP_RADIUS,
+) -> tuple[int, int] | None:
+	"""BFS from rc to find the nearest traversable cell with enough traversable neighbors."""
+	r, c = int(rc[0]), int(rc[1])
+	H, W = traversable.shape
+
+	dirs = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
+
+	def _neighbor_count(cr: int, cc: int) -> int:
+		n = 0
+		for dr, dc in dirs:
+			nr, nc = cr + dr, cc + dc
+			if 0 <= nr < H and 0 <= nc < W and traversable[nr, nc]:
+				n += 1
+		return n
+
+	if 0 <= r < H and 0 <= c < W and traversable[r, c] and _neighbor_count(r, c) >= _MIN_TRAV_NEIGHBORS:
+		return (r, c)
+
+	seen = np.zeros_like(traversable, dtype=bool)
+	q = deque([(r, c, 0)])
+	if 0 <= r < H and 0 <= c < W:
+		seen[r, c] = True
+
+	while q:
+		cr, cc, d = q.popleft()
+		if d > max_radius:
+			return None
+		if traversable[cr, cc] and d > 0 and _neighbor_count(cr, cc) >= _MIN_TRAV_NEIGHBORS:
+			return (cr, cc)
+		for dr, dc in dirs:
+			nr, nc = cr + dr, cc + dc
+			if 0 <= nr < H and 0 <= nc < W and not seen[nr, nc]:
+				seen[nr, nc] = True
+				q.append((nr, nc, d + 1))
+
+	return None
 
 
 def compute_autopath(
@@ -24,36 +69,27 @@ def compute_autopath(
 	sun_weight: float = 0.5,
 	pad_cells: int = 200,
 	max_expanded: int = 500000,
-) -> dict | None:
+) -> dict:
 	"""Compute an autopath between waypoints using Theta*.
 
-	Args:
-		site_name: Name of the site (used for bounds).
-		waypoints_xy: List of [x, y] world coordinates (at least 2).
-		All other params match the original Theta* config.
-
-	Returns:
-		dict with path_xy, total_cost, expanded, or None if failed.
+	Returns a dict with "path_xy" on success, or "error" on failure.
 	"""
 	bounds_dict = _load_site_bounds()
 	if site_name not in bounds_dict:
-		return None
-	b = bounds_dict[site_name]
+		return {"error": f"Site '{site_name}' not found"}
 
 	if len(waypoints_xy) < 2:
-		return None
+		return {"error": "Need at least 2 waypoints"}
 
-	# Validate & convert waypoints
 	user_wps: list[tuple[float, float]] = []
 	for wp in waypoints_xy:
 		if not (isinstance(wp, (list, tuple)) and len(wp) == 2):
-			return None
+			return {"error": f"Invalid waypoint format: {wp}"}
 		user_wps.append((float(wp[0]), float(wp[1])))
 
-	# Compute path segment by segment
 	all_xy: list[tuple[float, float]] = []
 	for i in range(len(user_wps) - 1):
-		seg = _compute_segment(
+		seg, err = _compute_segment(
 			start_xy=user_wps[i],
 			goal_xy=user_wps[i + 1],
 			min_slope_deg=min_slope_deg,
@@ -63,8 +99,10 @@ def compute_autopath(
 			pad_cells=pad_cells,
 			max_expanded=max_expanded,
 		)
+		if err:
+			return {"error": f"Segment {i+1}: {err}"}
 		if not seg or len(seg) < 2:
-			return None
+			return {"error": f"Segment {i+1}: path too short"}
 
 		if i == 0:
 			all_xy.extend(seg)
@@ -72,7 +110,7 @@ def compute_autopath(
 			all_xy.extend(seg[1:])
 
 	if len(all_xy) < 2:
-		return None
+		return {"error": "Combined path too short"}
 
 	return {
 		"path_xy": [[float(x), float(y)] for x, y in all_xy],
@@ -91,14 +129,12 @@ def _compute_segment(
 	sun_weight: float,
 	pad_cells: int,
 	max_expanded: int,
-) -> list[tuple[float, float]] | None:
-	"""Compute a single Theta* segment between two waypoints."""
-	# Load elevation data
+) -> tuple[list[tuple[float, float]] | None, str | None]:
+	"""Compute a single Theta* segment. Returns (path, error_message)."""
 	with rasterio.open(str(COARSE_ELEVATION_PATH)) as src:
 		transform = src.transform
 		inv = ~transform
 
-		# Convert world coords to pixel coords
 		sc_f, sr_f = inv * (float(start_xy[0]), float(start_xy[1]))
 		gc_f, gr_f = inv * (float(goal_xy[0]), float(goal_xy[1]))
 		sr = int(round(float(sr_f)))
@@ -108,10 +144,12 @@ def _compute_segment(
 
 		H = int(src.height)
 		W = int(src.width)
-		if not (0 <= sr < H and 0 <= sc < W and 0 <= gr < H and 0 <= gc < W):
-			return None
 
-		# Compute a padded window around the start-goal line
+		if not (0 <= sc < W and 0 <= sr < H):
+			return None, f"start ({start_xy[0]:.1f}, {start_xy[1]:.1f}) outside elevation raster"
+		if not (0 <= gc < W and 0 <= gr < H):
+			return None, f"goal ({goal_xy[0]:.1f}, {goal_xy[1]:.1f}) outside elevation raster"
+
 		dr = abs(gr - sr)
 		dc = abs(gc - sc)
 		dist_cells = int(max(dr, dc))
@@ -131,22 +169,22 @@ def _compute_segment(
 			stride = int(math.ceil(math.sqrt(float(area) / float(max_nodes))))
 			stride = max(1, stride)
 
-		# Read elevation
 		elev = src.read(
 			1,
 			window=rasterio.windows.Window(int(c0), int(r0), int(c1 - c0), int(r1 - r0)),
 		).astype(np.float32)
 		elev = elev[::stride, ::stride]
 
-	# Compute slope from elevation
+	px_res_x = float(abs(transform.a))
+	px_res_y = float(abs(transform.e))
+
 	_elev_filled = np.where(np.isfinite(elev), elev, 0)
 	_padded = np.pad(_elev_filled, 1, mode="edge")
-	gx, gy = np.gradient(_padded, 40.0 * stride, 40.0 * stride)
+	gx, gy = np.gradient(_padded, px_res_y * float(stride), px_res_x * float(stride))
 	gx = gx[1:-1, 1:-1]
 	gy = gy[1:-1, 1:-1]
-	slope = np.degrees(np.arctan(np.sqrt(gx**2 + gy**2)))
+	slope = np.degrees(np.arctan(np.sqrt(np.square(gx) + np.square(gy))))
 
-	# Load illumination
 	try:
 		with rasterio.open(str(ILLUMINATION_PATH)) as illum_src:
 			illum_window = from_bounds(
@@ -167,8 +205,8 @@ def _compute_segment(
 	except Exception:
 		illum = np.full_like(elev, 0.5)
 
-	# Build traversable mask and cell cost
 	traversable = np.isfinite(elev)
+	traversable &= np.isfinite(slope)
 	traversable &= slope >= min_slope_deg
 	traversable &= slope <= max_slope_deg
 
@@ -192,15 +230,23 @@ def _compute_segment(
 	).astype(np.float32)
 	cell_cost = np.clip(cell_cost, 0.01, np.inf).astype(np.float32)
 
-	# Local start/goal
 	start_local = (int((sr - r0) // stride), int((sc - c0) // stride))
 	goal_local = (int((gr - r0) // stride), int((gc - c0) // stride))
 
+	# Snap start/goal to nearest traversable cell if they land on steep terrain
 	if 0 <= start_local[0] < traversable.shape[0] and 0 <= start_local[1] < traversable.shape[1]:
+		if not traversable[start_local[0], start_local[1]]:
+			snapped = _snap_to_traversable(start_local, traversable)
+			if snapped is not None:
+				start_local = snapped
 		traversable[start_local[0], start_local[1]] = True
 		if not np.isfinite(cell_cost[start_local[0], start_local[1]]):
 			cell_cost[start_local[0], start_local[1]] = 1.0
 	if 0 <= goal_local[0] < traversable.shape[0] and 0 <= goal_local[1] < traversable.shape[1]:
+		if not traversable[goal_local[0], goal_local[1]]:
+			snapped = _snap_to_traversable(goal_local, traversable)
+			if snapped is not None:
+				goal_local = snapped
 		traversable[goal_local[0], goal_local[1]] = True
 		if not np.isfinite(cell_cost[goal_local[0], goal_local[1]]):
 			cell_cost[goal_local[0], goal_local[1]] = 1.0
@@ -217,10 +263,11 @@ def _compute_segment(
 		res_y=res_y,
 		max_expanded=int(max_expanded),
 	)
-	if result is None or not result["path_rc"]:
-		return None
+	if result is None:
+		return None, "no traversable path exists — try increasing the max slope or adjusting waypoints"
+	if not result["path_rc"]:
+		return None, "no traversable path exists between these waypoints with current slope constraints"
 
-	# Convert pixel path back to world coordinates
 	a, b, c_ = float(transform.a), float(transform.b), float(transform.c)
 	d, e, f_ = float(transform.d), float(transform.e), float(transform.f)
 	xy: list[tuple[float, float]] = []
@@ -235,4 +282,4 @@ def _compute_segment(
 		xy[0] = (float(start_xy[0]), float(start_xy[1]))
 		xy[-1] = (float(goal_xy[0]), float(goal_xy[1]))
 
-	return xy
+	return xy, None

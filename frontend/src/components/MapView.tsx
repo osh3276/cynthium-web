@@ -35,12 +35,11 @@ export default function MapView({ mapData, status, waypoints, autopathResult, on
 			img.src = src;
 		} else if (status === "loading") {
 			imgRef.current = null;
+			imgSrc.current = "";   // reset so identical data reloads the image
 			setImgLoaded(false);
 		}
 	}, [mapData, status]);
 
-	// Convert screen coords to world coords using the outer container's
-	// untransformed rect plus the transform state from react-zoom-pan-pinch.
 	const screenToWorld = (clientX: number, clientY: number) => {
 		const rect = containerRef.current?.getBoundingClientRect();
 		const st = transformState.current;
@@ -56,8 +55,6 @@ export default function MapView({ mapData, status, waypoints, autopathResult, on
 		return { x: worldX, y: worldY };
 	};
 
-	// Capture-phase handlers so they fire before react-zoom-pan-pinch
-	// consumes the event for panning (in case it calls stopPropagation).
 	const handlePointerDown = (e: React.MouseEvent) => {
 		clickStart.current = { x: e.clientX, y: e.clientY, time: Date.now() };
 	};

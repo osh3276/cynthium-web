@@ -1,23 +1,23 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 import { MAP_TYPES, SITE_PRESETS } from "../constants";
 import type { LoadStatus } from "../App";
 
 interface Props {
-	onLoadSite: (siteName: string, mapType: string) => void;
+	onLoadSite: (siteName: string, mapType: string, date: string) => void;
 	status: LoadStatus;
+	defaultDate: string;
 }
 
-export default function MapSelectionPanel({ onLoadSite, status }: Props) {
+export default function MapSelectionPanel({ onLoadSite, status, defaultDate }: Props) {
 	const presetNames = Object.keys(SITE_PRESETS).sort();
 	const [selectedSite, setSelectedSite] = useState("");
 	const [selectedMapType, setSelectedMapType] = useState("Elevation");
-	const dateRef = useRef<HTMLInputElement>(null);
-	const timeRef = useRef<HTMLInputElement>(null);
+	const [date, setDate] = useState(defaultDate);
 
 	const handleGenerate = useCallback(() => {
 		if (!selectedSite) return;
-		onLoadSite(selectedSite, selectedMapType);
-	}, [selectedSite, selectedMapType, onLoadSite]);
+		onLoadSite(selectedSite, selectedMapType, date);
+	}, [selectedSite, selectedMapType, date, onLoadSite]);
 
 	return (
 		<div className="panel">
@@ -56,27 +56,14 @@ export default function MapSelectionPanel({ onLoadSite, status }: Props) {
 				</select>
 			</div>
 
-			<div className="datetime-row">
-				<div className="datetime-group">
-					<label className="field-label">Date</label>
-					<input
-						ref={dateRef}
-						className="field-input"
-						type="text"
-						placeholder="yyyy-mm-dd"
-						defaultValue="2026-05-13"
-					/>
-				</div>
-				<div className="datetime-group">
-					<label className="field-label">Time</label>
-					<input
-						ref={timeRef}
-						className="field-input"
-						type="text"
-						placeholder="hh:mm:ss"
-						defaultValue="16:50:00"
-					/>
-				</div>
+			<div className="field-row">
+				<label className="field-label">Date:</label>
+				<input
+					className="field-input"
+					type="date"
+					value={date}
+					onChange={(e) => setDate(e.target.value)}
+				/>
 			</div>
 
 			<button

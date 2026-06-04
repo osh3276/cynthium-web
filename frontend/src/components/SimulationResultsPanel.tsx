@@ -1,9 +1,17 @@
 import { useState } from "react";
+import type { SimulationStats } from "../types";
 
 interface FieldDef {
 	label: string;
 	key: string;
 	fmt: string;
+}
+
+interface Props {
+	manualStats: SimulationStats | null;
+	autoStats: SimulationStats | null;
+	onSimulate: () => void;
+	simulating: boolean;
 }
 
 const PATH_FIELDS: FieldDef[] = [
@@ -53,22 +61,55 @@ const ROVER_FIELDS: FieldDef[] = [
 const INNER_TABS = ["Path", "Slope", "Environment", "Rover"] as const;
 const FIELD_GROUPS = [PATH_FIELDS, SLOPE_FIELDS, ENV_FIELDS, ROVER_FIELDS];
 
-function FieldsTable({ fields }: { fields: FieldDef[] }) {
+function formatValue(val: number, fmt: string): string {
+	if (!isFinite(val)) return "N/A";
+	if (val > 1e100) return "N/A";
+	if (val < -1e100) return "N/A";
+	return val.toFixed(fmt.includes(".3f") ? 3 : 2);
+}
+
+function formatTraversalTime(val: number): string {
+	if (!isFinite(val) || val <= 0) return "-";
+	if (val > 1e100) return "N/A";
+	if (val >= 86400) return (val / 86400).toFixed(2) + " days";
+	if (val >= 3600) return (val / 3600).toFixed(2) + " hr";
+	if (val >= 60) return (val / 60).toFixed(2) + " min";
+	return val.toFixed(2) + " s";
+}
+
+function FieldsTable({ fields, stats }: { fields: FieldDef[]; stats: SimulationStats | null }) {
 	return (
 		<table className="fields-table">
 			<tbody>
-				{fields.map((f) => (
-					<tr key={f.key}>
-						<td className="field-label">{f.label}</td>
-						<td className="field-value">-</td>
-					</tr>
-				))}
+				{fields.map((f) => {
+					const val = stats?.[f.key];
+					let display = "-";
+					if (val != null && isFinite(val)) {
+						if (f.key === "traverse_feasible") {
+							display = val >= 0.5 ? "Yes" : "No";
+						} else if (f.key === "traversal_time_s") {
+							display = formatTraversalTime(val);
+						} else {
+							display = formatValue(val, f.fmt);
+						}
+					}
+					const feasibleClass =
+						f.key === "traverse_feasible" && val != null
+							? val >= 0.5 ? " val-ok" : " val-bad"
+							: "";
+					return (
+						<tr key={f.key}>
+							<td className="field-label">{f.label}</td>
+							<td className={"field-value" + feasibleClass}>{display}</td>
+						</tr>
+					);
+				})}
 			</tbody>
 		</table>
 	);
 }
 
-function StatsTab() {
+function StatsTab({ stats }: { stats: SimulationStats | null }) {
 	const [activeTab, setActiveTab] = useState(0);
 	return (
 		<div className="stats-tab-inner">
@@ -84,21 +125,40 @@ function StatsTab() {
 				))}
 			</div>
 			<div className="inner-tab-content">
-				<FieldsTable fields={FIELD_GROUPS[activeTab]} />
+				<FieldsTable fields={FIELD_GROUPS[activeTab]} stats={stats} />
 			</div>
 		</div>
 	);
 }
 
-export default function SimulationResultsPanel() {
+export default function SimulationResultsPanel({
+	manualStats, autoStats, onSimulate, simulating,
+}: Props) {
 	const [outerTab, setOuterTab] = useState(0);
+
+	const activeStats = outerTab === 0 ? manualStats : autoStats;
+
+	const hasAny = manualStats != null || autoStats != null;
+	const statusText = simulating
+		? "Simulating..."
+		: hasAny
+			? "Simulation complete"
+			: "No simulation run yet";
 
 	return (
 		<div className="simulation-results">
 			<div className="results-header">
 				<span className="results-title">Simulation Results</span>
+				<button
+					className="panel-button panel-button-sm"
+					onClick={onSimulate}
+					disabled={simulating}
+					style={{ marginLeft: "auto" }}
+				>
+					{simulating ? "Running..." : "Simulate"}
+				</button>
 			</div>
-			<div className="results-status">No simulation run yet</div>
+			<div className="results-status">{statusText}</div>
 			<div className="outer-tabs">
 				<button
 					className={`outer-tab ${outerTab === 0 ? "outer-tab-active" : ""}`}
@@ -114,7 +174,7 @@ export default function SimulationResultsPanel() {
 				</button>
 			</div>
 			<div className="outer-tab-content">
-				<StatsTab />
+				<StatsTab stats={activeStats} />
 			</div>
 		</div>
 	);
