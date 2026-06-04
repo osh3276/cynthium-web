@@ -55,7 +55,7 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 
 		const ambient = new THREE.AmbientLight(0x000000, 0.3);
 		scene.add(ambient);
-		const sunLight = new THREE.DirectionalLight(0xffffff, 10);
+		const sunLight = new THREE.DirectionalLight(0xffffff, 3);
 		sunLight.position.set(5000, 8000, 3000);
 		scene.add(sunLight);
 		const fillLight = new THREE.DirectionalLight(0x8888ff, 0.2);
@@ -138,7 +138,6 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 				const z = hdata[r][c];
 				const t = c / (cols - 1);
 				const ty = (rows - 1 - r) / (rows - 1);
-				// Reflect X to match 2D map orientation
 				vertices.push(x1 - t * (x1 - x0), z, y0 + ty * (y1 - y0));
 			}
 		}
@@ -179,23 +178,27 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 		ctx.controls.update();
 	}, [mapData, status]);
 
-	// Update sun light direction from sun position
+	// Sun light: use azimuth from backend but fixed 45° elevation
 	useEffect(() => {
 		const ctx = sceneRef.current;
 		if (!ctx || !mapData) return;
 		const az = mapData.sun_azimuth;
-		const el = mapData.sun_elevation;
-		if (az == null || el == null) return;
+		if (az == null) return;
 
+		// Realistic elevation (commenting out for now):
+		// const el = mapData.sun_elevation;
+		// if (el == null) return;
+		// const elRad = (el * Math.PI) / 180;
+
+		const elRad = (45 * Math.PI) / 180;
 		const azRad = (az * Math.PI) / 180;
-		const elRad = (el * Math.PI) / 180;
 		const dist = 20000;
 		ctx.sunLight.position.set(
 			Math.sin(azRad) * Math.cos(elRad) * dist,
 			Math.sin(elRad) * dist,
 			Math.cos(azRad) * Math.cos(elRad) * dist,
 		);
-	}, [mapData?.sun_azimuth, mapData?.sun_elevation]);
+	}, [mapData?.sun_azimuth]);
 
 	// Update waypoints and paths
 	useEffect(() => {
