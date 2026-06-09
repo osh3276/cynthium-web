@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from services.pathfinding import compute_autopath
+from services.pathfinding import compute_autodesign
 from services.rover_settings import RoverSettings
 from services.simulation import run_simulation
 from services.site_rasters import get_site_center_lonlat, get_site_map, list_sites
@@ -18,12 +18,13 @@ app.add_middleware(
 )
 
 
-class AutopathRequest(BaseModel):
+class AutodesignRequest(BaseModel):
 	waypoints_xy: list[list[float]]
-	min_slope_deg: float = 0.0
-	max_slope_deg: float = 20.0
 	slope_weight: float = 1.0
 	sun_weight: float = 0.5
+	meteor_weight: float = 0.0
+	path_mode: str = "segment"
+	rover_friction_coeff: float = 0.6
 
 
 class SimulateRequest(BaseModel):
@@ -68,15 +69,16 @@ async def site_map(
 	return payload
 
 
-@app.post("/api/sites/{site_name}/autopath")
-async def site_autopath(site_name: str, req: AutopathRequest):
-	result = compute_autopath(
+@app.post("/api/sites/{site_name}/autodesign")
+async def site_autodesign(site_name: str, req: AutodesignRequest):
+	result = compute_autodesign(
 		site_name,
 		req.waypoints_xy,
-		min_slope_deg=req.min_slope_deg,
-		max_slope_deg=req.max_slope_deg,
 		slope_weight=req.slope_weight,
 		sun_weight=req.sun_weight,
+		meteor_weight=req.meteor_weight,
+		path_mode=req.path_mode,
+		rover_mu=req.rover_friction_coeff,
 	)
 	if "error" in result:
 		raise HTTPException(status_code=400, detail=result["error"])

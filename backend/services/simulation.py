@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import rasterio
 from rasterio.windows import from_bounds
@@ -13,6 +15,42 @@ from .site_rasters import (
 )
 
 LUNAR_GRAVITY = 1.625  # m/s^2
+
+# ---------------------------------------------------------------------------
+# Scoring constants — tweak these to rebalance the traversal score
+# ---------------------------------------------------------------------------
+# Max points per sub-score category (total should sum to 1000)
+SCORE_MAX_PATH_EFFICIENCY = 150
+SCORE_MAX_ENERGY_ECONOMY = 300
+SCORE_MAX_ILLUMINATION = 350
+SCORE_MAX_METEOR_SAFETY = 50
+SCORE_MAX_TRACTION_MATCH = 100
+SCORE_MAX_POWER_MATCH = 50
+
+# Expense subtracted from total: final = sum - expense * SCALE
+# expense = rover_power_hp + rover_mu^2 - rolling_resistance_coeff^2
+# Higher crr reduces expense (worse wheels = cheaper).
+# Autodesign keeps hp and crr at minimum, adjusts mu to meet budget.
+EXPENSE_SCALE = 100
+
+# Rover optimization tuning
+TRACTION_PEAK_RATIO = 0.7       # mu_required / mu_actual ratio that scores full marks
+POWER_PEAK_RATIO = 0.95         # achieved_v / v_ref ratio that scores full marks
+V_REF_CAP_MPS = 10.0            # max theoretical flat-ground speed considered
+
+# Grade thresholds
+GRADE_S = 900
+GRADE_A = 750
+GRADE_B = 600
+GRADE_C = 450
+GRADE_D = 300
+FAILURE_HARD_CAP = 250.0
+
+# Rover defaults for fallback
+DEFAULT_ROVER_MASS_KG = 150.0
+DEFAULT_ROVER_POWER_HP = 0.2
+DEFAULT_ROVER_CRR = 0.1
+HP_TO_W = 745.7
 
 
 # ---------------------------------------------------------------------------
@@ -669,6 +707,111 @@ def load_site_rasters(site_name: str) -> dict | None:
 # Top-level simulation entry point
 # ---------------------------------------------------------------------------
 
+def compute_traversal_score(stats: dict[str, float]) -> dict:
+	"""Compute traversal score (0-1000) with sub-scores and letter grade.
+
+	Failed traversals (traverse_feasible = 0) hard-cap at FAILURE_HARD_CAP, always F.
+	All max values come from the SCORE_MAX_* constants defined at the top of this file.
+	"""
+	g = LUNAR_GRAVITY
+	feasible = stats.get("traverse_feasible", 1.0) >= 0.5
+
+	# -- 1. Path Efficiency --
+	distance = stats.get("total_distance_travelled", 1.0)
+	displacement = stats.get("total_displacement", 0.0)
+	path_eff = SCORE_MAX_PATH_EFFICIENCY * max(0.0, min(1.0, displacement / max(distance, 1.0)))
+
+	# -- 2. Energy Economy --
+	# Compare actual avg velocity to rover's theoretical flat-ground top speed
+	mass = stats.get("rover_mass_kg", DEFAULT_ROVER_MASS_KG)
+	power_w = stats.get("rover_power_hp", DEFAULT_ROVER_POWER_HP) * HP_TO_W
+	crr = stats.get("rover_crr", DEFAULT_ROVER_CRR)
+	v_flat_max = power_w / max(mass * g * crr, 0.001)
+	v_ref = min(float(v_flat_max), V_REF_CAP_MPS)
+	avg_v = stats.get("average_velocity_mps", 0.0)
+	energy_eco = SCORE_MAX_ENERGY_ECONOMY * max(0.0, min(1.0, avg_v / max(v_ref, 0.01)))
+
+	# -- 3. Illumination --
+	# Composite: 70% path coverage in sunlight + 30% solar intensity during traversal
+	illum_pct = stats.get("percent_illumination", 0.0) / 100.0
+	avg_illum = stats.get("avg_solar_illumination_w_per_m2", 0.0)
+	solar_intensity = max(0.0, min(1.0, avg_illum / 200.0))
+	illumination = SCORE_MAX_ILLUMINATION * max(0.0, min(1.0, 0.7 * illum_pct + 0.3 * solar_intensity))
+
+	# -- 4. Rover Optimization --
+	# Traction match: how well actual mu matches what the path requires
+	required_mu = stats.get("required_wheel_friction_coeff", 0.0)
+	actual_mu = stats.get("rover_mu", 0.0)
+	if actual_mu <= 0.01:
+		traction_match = 0.0
+	elif required_mu <= 0.01:
+		traction_match = float(SCORE_MAX_TRACTION_MATCH)
+	else:
+		ratio = required_mu / actual_mu
+		if ratio > 1.0:
+			traction_match = float(SCORE_MAX_TRACTION_MATCH) * 0.5  # undergunned but survived
+		else:
+			traction_match = SCORE_MAX_TRACTION_MATCH * max(0.0, min(1.0, ratio / TRACTION_PEAK_RATIO))
+
+	# Power match: actual speed vs theoretical potential
+	if v_flat_max <= 0.01:
+		power_match = 0.0
+	elif avg_v >= v_ref * POWER_PEAK_RATIO:
+		power_match = float(SCORE_MAX_POWER_MATCH)
+	else:
+		power_match = SCORE_MAX_POWER_MATCH * max(0.0, min(1.0, avg_v / max(v_ref * POWER_PEAK_RATIO, 0.01)))
+
+	rover_opt = traction_match + power_match
+
+	# -- 5. Meteor Safety --
+	avg_meteor = stats.get("average_meteor_flux", 0.0)
+	meteor_safety = SCORE_MAX_METEOR_SAFETY * max(0.0, min(1.0, 1.0 - avg_meteor / 5000.0))
+
+	# -- 6. Rover Expense penalty --
+	# Subtracted from total. expense = hp + mu² - crr²
+	_hp = stats.get("rover_power_hp", DEFAULT_ROVER_POWER_HP)
+	_mu = stats.get("rover_mu", 0.6)
+	_crr = stats.get("rover_crr", DEFAULT_ROVER_CRR)
+	expense = _hp + _mu * _mu - _crr * _crr
+	expense_penalty = expense * EXPENSE_SCALE
+
+	# -- Total (expense subtracted) --
+	total = path_eff + energy_eco + illumination + rover_opt + meteor_safety - expense_penalty
+
+	# Hard-cap for failed traversals
+	if not feasible:
+		total = min(total, FAILURE_HARD_CAP)
+
+	total = max(0.0, min(1000.0, total))
+
+	# Grade
+	if total >= GRADE_S:
+		grade = "S"
+	elif total >= GRADE_A:
+		grade = "A"
+	elif total >= GRADE_B:
+		grade = "B"
+	elif total >= GRADE_C:
+		grade = "C"
+	elif total >= GRADE_D:
+		grade = "D"
+	else:
+		grade = "F"
+
+	return {
+		"traversal_score": round(total, 1),
+		"traversal_grade": grade,
+		"traversal_subscores": {
+			"path_efficiency": round(path_eff, 1),
+			"energy_economy": round(energy_eco, 1),
+			"illumination": round(illumination, 1),
+			"meteor_safety": round(meteor_safety, 1),
+			"rover_traction_match": round(traction_match, 1),
+			"rover_power_match": round(power_match, 1),
+		},
+	}
+
+
 def _sanitize_float(v: float) -> float:
 	"""Replace non-finite floats with safe sentinels for JSON serialization."""
 	if np.isnan(v):
@@ -680,8 +823,21 @@ def _sanitize_float(v: float) -> float:
 	return float(v)
 
 
-def _sanitize_stats(stats: dict[str, float]) -> dict[str, float]:
-	return {k: _sanitize_float(v) for k, v in stats.items()}
+def _sanitize_stats(stats: dict) -> dict:
+	sanitized = {}
+	for k, v in stats.items():
+		if isinstance(v, str):
+			sanitized[k] = v
+		elif isinstance(v, dict):
+			sanitized[k] = {sk: _sanitize_float(sv) if isinstance(sv, (int, float)) else sv for sk, sv in v.items()}
+		elif isinstance(v, (int, float)):
+			sanitized[k] = _sanitize_float(float(v))
+		elif v is None:
+			sanitized[k] = 0.0
+		else:
+			# bool, list, etc. — pass through as-is
+			sanitized[k] = v
+	return sanitized
 
 
 def run_simulation(
@@ -690,6 +846,9 @@ def run_simulation(
 	rover: RoverSettings,
 ) -> dict[str, float]:
 	"""Run full simulation stats + rover dynamics for a path on a site."""
+	t0 = time.perf_counter()
+	path_label = f"site={site_name} pts={len(path_xy)} rover=(μ={rover.wheel_friction_coeff} P={rover.power_hp} Crr={rover.rolling_resistance_coeff})"
+
 	rasters = load_site_rasters(site_name)
 	if rasters is None:
 		raise ValueError(f"Site '{site_name}' not found or has no elevation data")
@@ -723,5 +882,12 @@ def run_simulation(
 	stats["rover_power_hp"] = rover.power_hp
 	stats["rover_mu"] = rover.wheel_friction_coeff
 	stats["rover_crr"] = rover.rolling_resistance_coeff
+
+	score = compute_traversal_score(stats)
+	stats.update(score)
+
+	elapsed = time.perf_counter() - t0
+	feasible = stats.get("traverse_feasible", 0)
+	print(f"[TIMER] Simulation {elapsed:.1f}s | {path_label} feasible={feasible}")
 
 	return _sanitize_stats(stats)

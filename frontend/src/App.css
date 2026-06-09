@@ -159,11 +159,27 @@ body {
 	min-height: 200px;
 }
 
+.resize-handle {
+	height: 4px;
+	cursor: ns-resize;
+	background: var(--border);
+	flex-shrink: 0;
+	position: relative;
+}
+
+.resize-handle:hover {
+	background: var(--accent);
+}
+
 .results-area {
 	flex-shrink: 0;
-	height: 200px;
-	overflow: hidden;
 	border-top: 1px solid var(--border);
+}
+
+.results-scroll {
+	overflow-y: auto;
+	flex: 1;
+	min-height: 0;
 }
 
 /* ===== View Container (Map + Terrain splitter) ===== */
@@ -235,6 +251,93 @@ body {
 .top-left {
 	top: 6px;
 	left: 6px;
+}
+
+/* ===== Score Card ===== */
+.score-card {
+	padding: 4px 0;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.score-main {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.score-grade {
+	font-size: 28px;
+	font-weight: 700;
+	line-height: 1;
+}
+
+.score-total {
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--text-bright);
+}
+
+.score-denom {
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--text-dim);
+}
+
+.score-bar-total {
+	height: 6px;
+	background: var(--input-bg);
+	border-radius: 3px;
+	overflow: hidden;
+}
+
+.score-bar-fill {
+	height: 100%;
+	border-radius: 3px;
+	transition: width 0.3s ease;
+}
+
+.score-subscores {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding-top: 2px;
+}
+
+.subscore-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+}
+
+.subscore-label {
+	width: 90px;
+	flex-shrink: 0;
+	color: var(--text);
+}
+
+.subscore-bar {
+	flex: 1;
+	height: 4px;
+	background: var(--input-bg);
+	border-radius: 2px;
+	overflow: hidden;
+}
+
+.subscore-fill {
+	height: 100%;
+	background: var(--accent);
+	border-radius: 2px;
+}
+
+.subscore-val {
+	width: 24px;
+	text-align: right;
+	color: var(--text-dim);
+	font-family: var(--font-mono);
+	font-size: 10px;
 }
 
 /* ===== Simulation Results ===== */
@@ -530,6 +633,12 @@ select.field-input option {
 .panel-button-sm {
 	padding: 2px 8px;
 	font-size: 11px;
+}
+
+.btn-active {
+	background: var(--accent) !important;
+	color: white !important;
+	border-color: var(--accent-hover) !important;
 }
 
 .generate-button {

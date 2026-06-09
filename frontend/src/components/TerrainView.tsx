@@ -1,21 +1,21 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { MapPayload, Waypoint, AutopathResult } from "../types";
+import type { MapPayload, Waypoint, AutodesignResult } from "../types";
 import type { LoadStatus } from "../App";
 
 interface Props {
 	mapData: MapPayload | null;
 	status: LoadStatus;
 	waypoints: Waypoint[];
-	autopathResult: AutopathResult | null;
+	autodesignResult: AutodesignResult | null;
 }
 
 function reflectX(x: number, b: { left: number; right: number }): number {
 	return b.left + b.right - x;
 }
 
-export default function TerrainView({ mapData, status, waypoints, autopathResult }: Props) {
+export default function TerrainView({ mapData, status, waypoints, autodesignResult }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const prevShapeKey = useRef<string | null>(null);
 	const sceneRef = useRef<{
@@ -160,8 +160,8 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 			color: 0x878787,
 			flatShading: false,
 			side: THREE.DoubleSide,
-			roughness: 0.8,
-			metalness: 0.05,
+			roughness: 1.0,
+			metalness: 0.10,
 		});
 
 		const mesh = new THREE.Mesh(geo, mat);
@@ -190,9 +190,9 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 		// if (el == null) return;
 		// const elRad = (el * Math.PI) / 180;
 
-		const elRad = (45 * Math.PI) / 180;
+		const elRad = (25 * Math.PI) / 180;
 		const azRad = (az * Math.PI) / 180;
-		const dist = 20000;
+		const dist = 100000;
 		ctx.sunLight.position.set(
 			Math.sin(azRad) * Math.cos(elRad) * dist,
 			Math.sin(elRad) * dist,
@@ -254,9 +254,9 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 			ctx.pathLine = line;
 		}
 
-		if (autopathResult && autopathResult.path_xy.length > 1) {
+		if (autodesignResult && autodesignResult.path_xy.length > 1) {
 			const pts = _surfaceLine(
-				autopathResult.path_xy.map((p) => ({ x: p[0], y: p[1] })),
+				autodesignResult.path_xy.map((p) => ({ x: p[0], y: p[1] })),
 				mapData,
 				Z_OFFSET,
 				reflectX,
@@ -267,7 +267,7 @@ export default function TerrainView({ mapData, status, waypoints, autopathResult
 			ctx.scene.add(line);
 			ctx.autoLine = line;
 		}
-	}, [mapData, waypoints, autopathResult]);
+	}, [mapData, waypoints, autodesignResult]);
 
 	return (
 		<div ref={containerRef} className="terrain-view">

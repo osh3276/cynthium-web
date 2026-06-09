@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import re
+import time
 from collections import deque
 from pathlib import Path
 
@@ -9,7 +10,12 @@ import numpy as np
 import rasterio
 from rasterio.windows import from_bounds
 
-from .site_rasters import COARSE_ELEVATION_PATH, ILLUMINATION_PATH, _load_site_bounds
+from .site_rasters import (
+	COARSE_ELEVATION_PATH,
+	ILLUMINATION_PATH,
+	METEOR_PATH,
+	_load_site_bounds,
+)
 from .theta_star import theta_star
 
 HERE = Path(__file__).resolve().parent.parent
@@ -59,21 +65,29 @@ def _snap_to_traversable(
 	return None
 
 
-def compute_autopath(
+def compute_autodesign(
 	site_name: str,
 	waypoints_xy: list[list[float]],
 	*,
-	min_slope_deg: float = 0.0,
-	max_slope_deg: float = 20.0,
 	slope_weight: float = 1.0,
 	sun_weight: float = 0.5,
+	meteor_weight: float = 0.0,
 	pad_cells: int = 200,
 	max_expanded: int = 500000,
+	path_mode: str = "segment",
+	rover_mu: float = 0.6,
 ) -> dict:
-	"""Compute an autopath between waypoints using Theta*.
+	"""Compute the optimal path for the current rover using Theta*.
 
+	Derives max climbable slope from rover's wheel friction (mu),
+	so the path is tailored to what this rover can handle.
 	Returns a dict with "path_xy" on success, or "error" on failure.
 	"""
+	t_start = time.perf_counter()
+
+	# Rover's max climbable slope governs the cost normalization
+	max_climbable = max(1.0, math.degrees(math.atan(rover_mu)))
+
 	bounds_dict = _load_site_bounds()
 	if site_name not in bounds_dict:
 		return {"error": f"Site '{site_name}' not found"}
@@ -88,32 +102,46 @@ def compute_autopath(
 		user_wps.append((float(wp[0]), float(wp[1])))
 
 	all_xy: list[tuple[float, float]] = []
-	for i in range(len(user_wps) - 1):
-		seg, err = _compute_segment(
-			start_xy=user_wps[i],
-			goal_xy=user_wps[i + 1],
-			min_slope_deg=min_slope_deg,
-			max_slope_deg=max_slope_deg,
-			slope_weight=slope_weight,
-			sun_weight=sun_weight,
-			pad_cells=pad_cells,
-			max_expanded=max_expanded,
-		)
-		if err:
-			return {"error": f"Segment {i+1}: {err}"}
-		if not seg or len(seg) < 2:
-			return {"error": f"Segment {i+1}: path too short"}
+	seg_kw = dict(
+		min_slope_deg=0.0,
+		max_slope_deg=max_climbable,
+		slope_weight=slope_weight,
+		sun_weight=sun_weight,
+		meteor_weight=meteor_weight,
+		pad_cells=pad_cells,
+		max_expanded=max_expanded,
+	)
 
-		if i == 0:
-			all_xy.extend(seg)
-		else:
-			all_xy.extend(seg[1:])
+	if path_mode == "direct":
+		seg, err = _compute_segment(start_xy=user_wps[0], goal_xy=user_wps[-1], **seg_kw)
+		if err:
+			return {"error": err}
+		if not seg or len(seg) < 2:
+			return {"error": "Path too short"}
+		all_xy = seg
+	else:
+		for i in range(len(user_wps) - 1):
+			seg, err = _compute_segment(start_xy=user_wps[i], goal_xy=user_wps[i + 1], **seg_kw)
+			if err:
+				return {"error": f"Segment {i+1}: {err}"}
+			if not seg or len(seg) < 2:
+				return {"error": f"Segment {i+1}: path too short"}
+
+			if i == 0:
+				all_xy.extend(seg)
+			else:
+				all_xy.extend(seg[1:])
 
 	if len(all_xy) < 2:
 		return {"error": "Combined path too short"}
 
+	site_path_xy = [[float(x), float(y)] for x, y in all_xy]
+
+	elapsed = time.perf_counter() - t_start
+	print(f"[TIMER] Autodesign {elapsed:.1f}s | site={site_name} wps={len(waypoints_xy)} mode={path_mode} μ={rover_mu} max_climb={max_climbable:.1f}°")
+
 	return {
-		"path_xy": [[float(x), float(y)] for x, y in all_xy],
+		"path_xy": site_path_xy,
 		"total_cost": 0.0,
 		"expanded": 0,
 	}
@@ -127,6 +155,7 @@ def _compute_segment(
 	max_slope_deg: float,
 	slope_weight: float,
 	sun_weight: float,
+	meteor_weight: float = 0.0,
 	pad_cells: int,
 	max_expanded: int,
 ) -> tuple[list[tuple[float, float]] | None, str | None]:
@@ -205,10 +234,38 @@ def _compute_segment(
 	except Exception:
 		illum = np.full_like(elev, 0.5)
 
+	try:
+		with rasterio.open(str(METEOR_PATH)) as meteor_src:
+			meteor_window = from_bounds(
+				float(transform.c + c0 * float(transform.a)),
+				float(transform.f + r0 * float(transform.e) + win_h * float(transform.e)),
+				float(transform.c + c1 * float(transform.a)),
+				float(transform.f + r0 * float(transform.e)),
+				transform=meteor_src.transform,
+			)
+			meteor_window = meteor_window.round_offsets().round_lengths()
+			if meteor_window.width > 0 and meteor_window.height > 0:
+				meteor = meteor_src.read(1, window=meteor_window, boundless=True, fill_value=float("nan")).astype(np.float32)
+				if meteor.shape != elev.shape:
+					from scipy.ndimage import zoom
+					meteor = zoom(meteor, (elev.shape[0] / meteor.shape[0], elev.shape[1] / meteor.shape[1]), order=0)
+			else:
+				meteor = np.full_like(elev, 0.0)
+	except Exception:
+		meteor = np.full_like(elev, 0.0)
+
+	meteor_norm = np.full_like(meteor, 0.0, dtype=np.float32)
+	finite_meteor = meteor[np.isfinite(meteor)]
+	if finite_meteor.size > 0:
+		lo = float(np.min(finite_meteor))
+		hi = float(np.max(finite_meteor))
+		if hi > lo:
+			meteor_norm = ((meteor - lo) / (hi - lo)).astype(np.float32)
+			meteor_norm = np.clip(meteor_norm, 0.0, 1.0)
+			meteor_norm[~np.isfinite(meteor_norm)] = 0.0
+
 	traversable = np.isfinite(elev)
 	traversable &= np.isfinite(slope)
-	traversable &= slope >= min_slope_deg
-	traversable &= slope <= max_slope_deg
 
 	max_slope_val = float(max_slope_deg) if max_slope_deg > 0 else 1.0
 	slope_norm = np.clip(slope.astype(np.float32) / max_slope_val, 0.0, 1.0)
@@ -227,6 +284,7 @@ def _compute_segment(
 		1.0
 		+ (float(max(0.0, slope_weight)) * slope_norm)
 		+ (float(max(0.0, sun_weight)) * (1.0 - illum_norm))
+		+ (float(max(0.0, meteor_weight)) * meteor_norm)
 	).astype(np.float32)
 	cell_cost = np.clip(cell_cost, 0.01, np.inf).astype(np.float32)
 

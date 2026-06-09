@@ -1,25 +1,37 @@
-import { useEffect, useRef, useState } from "react";
-import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch";
-import type { MapPayload, Waypoint, AutopathResult } from "../types";
+import { useEffect, useRef, useState, useCallback, useLayoutEffect } from "react";
+import type { MapPayload, Waypoint, AutodesignResult } from "../types";
 import type { LoadStatus } from "../App";
 
 interface Props {
 	mapData: MapPayload | null;
 	status: LoadStatus;
 	waypoints: Waypoint[];
-	autopathResult: AutopathResult | null;
+	autodesignResult: AutodesignResult | null;
 	onAddWaypoint: (wp: Waypoint) => void;
 }
 
-export default function MapView({ mapData, status, waypoints, autopathResult, onAddWaypoint }: Props) {
+export default function MapView({ mapData, status, waypoints, autodesignResult, onAddWaypoint }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
+	const contentRef = useRef<HTMLDivElement>(null);
 	const imgRef = useRef<HTMLImageElement | null>(null);
-	const [imgLoaded, setImgLoaded] = useState(false);
 	const imgSrc = useRef("");
 	const [imgNatural, setImgNatural] = useState({ w: 1, h: 1 });
-	const clickStart = useRef({ x: 0, y: 0, time: 0 });
-	const transformState = useRef<{ positionX: number; positionY: number; scale: number } | null>(null);
+	const [imgLoaded, setImgLoaded] = useState(false);
 
+	// Pan / zoom state — refs avoid re-renders during interaction
+	const pos = useRef({ x: 0, y: 0 });
+	const scale = useRef(1);
+
+	// Apply transform to DOM directly — no rAF, no React state
+	const applyTransform = useCallback(() => {
+		const el = contentRef.current;
+		if (!el) return;
+		const { x, y } = pos.current;
+		const s = scale.current;
+		el.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+	}, []);
+
+	// Load image
 	useEffect(() => {
 		if (status === "loaded" && mapData) {
 			const src = `data:image/png;base64,${mapData.image_data}`;
@@ -35,46 +47,130 @@ export default function MapView({ mapData, status, waypoints, autopathResult, on
 			img.src = src;
 		} else if (status === "loading") {
 			imgRef.current = null;
-			imgSrc.current = "";   // reset so identical data reloads the image
+			imgSrc.current = "";
 			setImgLoaded(false);
 		}
 	}, [mapData, status]);
 
-	const screenToWorld = (clientX: number, clientY: number) => {
+	// Reset & center transform when image loads
+	useLayoutEffect(() => {
+		if (!imgLoaded || !imgRef.current || !mapData || !containerRef.current) return;
+		const cw = containerRef.current.clientWidth;
+		const ch = containerRef.current.clientHeight;
+		const iw = imgNatural.w;
+		const ih = imgNatural.h;
+		const s = Math.min(cw / iw, ch / ih, 1);
+		scale.current = s;
+		pos.current = { x: (cw - iw * s) / 2, y: (ch - ih * s) / 2 };
+		applyTransform();
+	}, [mapData, status, imgLoaded, imgNatural.w, imgNatural.h, applyTransform]);
+
+	// Pointer interaction
+	const pointerActive = useRef(false);
+	const panning = useRef(false);
+	const panStart = useRef({ x: 0, y: 0 });
+	const pointerDownPos = useRef({ x: 0, y: 0 });
+	const pointerDownTime = useRef(0);
+
+	// Attach wheel listener as non-passive so preventDefault works
+	useEffect(() => {
+		const el = containerRef.current;
+		if (!el) return;
+		const onWheel = (e: WheelEvent) => {
+			e.preventDefault();
+			const rect = el.getBoundingClientRect();
+			const mx = e.clientX - rect.left;
+			const my = e.clientY - rect.top;
+
+			const oldScale = scale.current;
+			const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+			const newScale = Math.max(0.05, Math.min(50, oldScale * factor));
+
+			const { x, y } = pos.current;
+			pos.current = {
+				x: mx - (mx - x) * (newScale / oldScale),
+				y: my - (my - y) * (newScale / oldScale),
+			};
+			scale.current = newScale;
+			applyTransform();
+		};
+		el.addEventListener("wheel", onWheel, { passive: false });
+		return () => el.removeEventListener("wheel", onWheel);
+	}, [applyTransform]);
+
+	const screenToWorld = useCallback((clientX: number, clientY: number) => {
 		const rect = containerRef.current?.getBoundingClientRect();
-		const st = transformState.current;
-		if (!rect || !st || !mapData) return null;
+		if (!rect || !mapData) return null;
 		const wx = clientX - rect.left;
 		const wy = clientY - rect.top;
-		const imgX = (wx - st.positionX) / st.scale;
-		const imgY = (wy - st.positionY) / st.scale;
+		const { x, y } = pos.current;
+		const s = scale.current;
+		const imgX = (wx - x) / s;
+		const imgY = (wy - y) / s;
 		if (imgX < 0 || imgX > imgNatural.w || imgY < 0 || imgY > imgNatural.h) return null;
 		const b = mapData.bounds;
 		const worldX = b.left + (imgX / imgNatural.w) * (b.right - b.left);
 		const worldY = b.bottom + ((imgNatural.h - imgY) / imgNatural.h) * (b.top - b.bottom);
 		return { x: worldX, y: worldY };
-	};
+	}, [mapData, imgNatural]);
 
-	const handlePointerDown = (e: React.MouseEvent) => {
-		clickStart.current = { x: e.clientX, y: e.clientY, time: Date.now() };
-	};
+	const onPointerDown = useCallback((e: React.PointerEvent) => {
+		pointerActive.current = true;
+		panning.current = false;
+		panStart.current = { x: e.clientX, y: e.clientY };
+		pointerDownPos.current = { x: e.clientX, y: e.clientY };
+		pointerDownTime.current = Date.now();
+		(e.target as HTMLElement).setPointerCapture(e.pointerId);
+	}, []);
 
-	const handlePointerUp = (e: React.MouseEvent) => {
-		const dx = Math.abs(e.clientX - clickStart.current.x);
-		const dy = Math.abs(e.clientY - clickStart.current.y);
-		const dt = Date.now() - clickStart.current.time;
-		if (dx < 5 && dy < 5 && dt < 300) {
-			const wp = screenToWorld(e.clientX, e.clientY);
-			if (wp) onAddWaypoint(wp);
+	const onPointerMove = useCallback((e: React.PointerEvent) => {
+		if (!pointerActive.current) return;
+		const dx = e.clientX - panStart.current.x;
+		const dy = e.clientY - panStart.current.y;
+		if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+			panning.current = true;
 		}
-	};
+		if (!panning.current) return;
+		pos.current.x += dx;
+		pos.current.y += dy;
+		panStart.current = { x: e.clientX, y: e.clientY };
+		applyTransform();
+	}, [applyTransform]);
+
+	const onPointerUp = useCallback((e: React.PointerEvent) => {
+		pointerActive.current = false;
+		(e.target as HTMLElement).releasePointerCapture(e.pointerId);
+
+		if (!panning.current) {
+			const dx = Math.abs(e.clientX - pointerDownPos.current.x);
+			const dy = Math.abs(e.clientY - pointerDownPos.current.y);
+			const dt = Date.now() - pointerDownTime.current;
+			if (dx < 5 && dy < 5 && dt < 300) {
+				const wp = screenToWorld(e.clientX, e.clientY);
+				if (wp) onAddWaypoint(wp);
+			}
+		}
+	}, [screenToWorld, onAddWaypoint]);
+
+	// Throttled overlay display
+	const [displayScale, setDisplayScale] = useState(1);
+	const [displayWpCount, setDisplayWpCount] = useState(0);
+	useEffect(() => {
+		const id = setInterval(() => {
+			setDisplayScale(scale.current);
+			setDisplayWpCount(waypoints.length);
+		}, 100);
+		return () => clearInterval(id);
+	}, [waypoints.length]);
 
 	return (
 		<div
 			className="map-view"
 			ref={containerRef}
-			onMouseDownCapture={handlePointerDown}
-			onMouseUpCapture={handlePointerUp}
+			onPointerDown={onPointerDown}
+			onPointerMove={onPointerMove}
+			onPointerUp={onPointerUp}
+			style={{ touchAction: "none", cursor: "grab" }}
 		>
 			{status === "idle" && (
 				<div className="map-placeholder" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
@@ -90,85 +186,77 @@ export default function MapView({ mapData, status, waypoints, autopathResult, on
 				</div>
 			)}
 			{status === "loaded" && imgLoaded && imgRef.current && (
-				<TransformWrapper
-					initialScale={1}
-					minScale={0.1}
-					maxScale={20}
-					centerOnInit
-					wheel={{ step: 0.015 }}
-				>
-					{({ state }) => {
-						transformState.current = state;
-						return (
-							<>
-								<TransformComponent
-									wrapperStyle={{ width: "100%", height: "100%" }}
-									contentStyle={{ width: "auto", height: "auto", position: "relative" }}
-								>
-									<img
-										src={imgSrc.current}
-										alt={mapData!.label}
-										style={{ display: "block", maxWidth: "none", userSelect: "none" }}
-										draggable={false}
-									/>
-									<svg
-										style={{
-											position: "absolute", top: 0, left: 0,
-											width: imgNatural.w, height: imgNatural.h,
-											pointerEvents: "none",
-										}}
-									>
-										{waypoints.map((wp, i) => {
-											const b = mapData!.bounds;
-											const ix = ((wp.x - b.left) / (b.right - b.left)) * imgNatural.w;
-											const iy = imgNatural.h - ((wp.y - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
-											return (
-												<g key={i}>
-													<circle cx={ix} cy={iy} r={6} fill="white" stroke="black" strokeWidth={1.5} />
-													<text x={ix + 8} y={iy + 3} fill="white" fontSize={11} stroke="black" strokeWidth={0.4}>
-														{i + 1}
-													</text>
-												</g>
-											);
-										})}
-										{waypoints.length > 1 && (
-											<polyline
-												fill="none"
-												stroke="white"
-												strokeWidth={2}
-												strokeDasharray="6,3"
-												points={waypoints.map((wp) => {
-													const b = mapData!.bounds;
-													const ix = ((wp.x - b.left) / (b.right - b.left)) * imgNatural.w;
-													const iy = imgNatural.h - ((wp.y - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
-													return `${ix},${iy}`;
-												}).join(" ")}
-											/>
-										)}
-										{autopathResult && autopathResult.path_xy.length > 1 && (
-											<polyline
-												fill="none"
-												stroke="#4fc3f7"
-												strokeWidth={2}
-												points={autopathResult.path_xy.map((p) => {
-													const b = mapData!.bounds;
-													const ix = ((p[0] - b.left) / (b.right - b.left)) * imgNatural.w;
-													const iy = imgNatural.h - ((p[1] - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
-													return `${ix},${iy}`;
-												}).join(" ")}
-											/>
-										)}
-									</svg>
-								</TransformComponent>
-								{mapData && (
-									<div className="view-overlay top-left" style={{ zIndex: 20 }}>
-										{mapData.label} ({mapData.value_range[0].toFixed(1)} – {mapData.value_range[1].toFixed(1)}) · {state.scale.toFixed(1)}x · {waypoints.length} pts
-									</div>
-								)}
-							</>
-						);
-					}}
-				</TransformWrapper>
+				<>
+					<div
+						ref={contentRef}
+						style={{
+							position: "absolute",
+							top: 0,
+							left: 0,
+							transformOrigin: "0 0",
+						}}
+					>
+						<img
+							src={imgSrc.current}
+							alt={mapData!.label}
+							style={{ display: "block", maxWidth: "none", userSelect: "none" }}
+							draggable={false}
+						/>
+						<svg
+							style={{
+								position: "absolute", top: 0, left: 0,
+								width: imgNatural.w, height: imgNatural.h,
+								pointerEvents: "none",
+							}}
+						>
+							{waypoints.map((wp, i) => {
+								const b = mapData!.bounds;
+								const ix = ((wp.x - b.left) / (b.right - b.left)) * imgNatural.w;
+								const iy = imgNatural.h - ((wp.y - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
+								return (
+									<g key={i}>
+										<circle cx={ix} cy={iy} r={6} fill="white" stroke="black" strokeWidth={1.5} />
+										<text x={ix + 8} y={iy + 3} fill="white" fontSize={11} stroke="black" strokeWidth={0.4}>
+											{i + 1}
+										</text>
+									</g>
+								);
+							})}
+							{waypoints.length > 1 && (
+								<polyline
+									fill="none"
+									stroke="white"
+									strokeWidth={2}
+									strokeDasharray="6,3"
+									points={waypoints.map((wp) => {
+										const b = mapData!.bounds;
+										const ix = ((wp.x - b.left) / (b.right - b.left)) * imgNatural.w;
+										const iy = imgNatural.h - ((wp.y - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
+										return `${ix},${iy}`;
+									}).join(" ")}
+								/>
+							)}
+							{autodesignResult && autodesignResult.path_xy.length > 1 && (
+								<polyline
+									fill="none"
+									stroke="#4fc3f7"
+									strokeWidth={2}
+									points={autodesignResult.path_xy.map((p) => {
+										const b = mapData!.bounds;
+										const ix = ((p[0] - b.left) / (b.right - b.left)) * imgNatural.w;
+										const iy = imgNatural.h - ((p[1] - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
+										return `${ix},${iy}`;
+									}).join(" ")}
+								/>
+							)}
+						</svg>
+					</div>
+					{mapData && (
+						<div className="view-overlay top-left" style={{ zIndex: 20 }}>
+							{mapData.label} ({mapData.value_range[0].toFixed(1)} – {mapData.value_range[1].toFixed(1)}) · {displayScale.toFixed(1)}x · {displayWpCount} pts
+						</div>
+					)}
+				</>
 			)}
 		</div>
 	);

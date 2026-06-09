@@ -1,9 +1,9 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import MenuBar from "./components/MenuBar";
 import ViewContainer from "./components/ViewContainer";
 import SimulationResultsPanel from "./components/SimulationResultsPanel";
 import Sidebar from "./components/Sidebar";
-import { type MapPayload, type Waypoint, type AutopathResult, type AutopathConfig, type RoverSettings, type SimulationStats } from "./types";
+import { type MapPayload, type Waypoint, type AutodesignResult, type AutodesignConfig, type RoverSettings, type SimulationStats } from "./types";
 import "./App.css";
 
 export type LoadStatus = "idle" | "loading" | "loaded" | "error";
@@ -32,12 +32,14 @@ function App() {
 	const [status, setStatus] = useState<LoadStatus>("idle");
 	const [currentSite, setCurrentSite] = useState("");
 	const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
-	const [autopathResult, setAutopathResult] = useState<AutopathResult | null>(null);
-	const [autopathRunning, setAutopathRunning] = useState(false);
+	const [autodesignResult, setAutodesignResult] = useState<AutodesignResult | null>(null);
+	const [autodesignRunning, setAutodesignRunning] = useState(false);
 	const [roverSettings, setRoverSettings] = useState<RoverSettings>(DEFAULT_ROVER);
 	const [manualStats, setManualStats] = useState<SimulationStats | null>(null);
 	const [autoStats, setAutoStats] = useState<SimulationStats | null>(null);
 	const [simulating, setSimulating] = useState(false);
+	const [resultsHeight, setResultsHeight] = useState(200);
+	const resizeRef = useRef<boolean>(false);
 
 	const handleLoadSite = useCallback(async (siteName: string, mapType: string, date: string) => {
 		const sameSite = siteName === currentSite;
@@ -45,7 +47,7 @@ function App() {
 		setStatus("loading");
 		if (!sameSite) {
 			setWaypoints([]);
-			setAutopathResult(null);
+			setAutodesignResult(null);
 			setManualStats(null);
 			setAutoStats(null);
 		}
@@ -64,34 +66,38 @@ function App() {
 
 	const handleAddWaypoint = useCallback((wp: Waypoint) => {
 		setWaypoints((prev) => [...prev, wp]);
-		setAutopathResult(null);
+		setAutodesignResult(null);
 	}, []);
 
 	const handleRemoveWaypoint = useCallback((index: number) => {
 		setWaypoints((prev) => prev.filter((_, i) => i !== index));
-		setAutopathResult(null);
+		setAutodesignResult(null);
 	}, []);
 
-	const handleAutopath = useCallback(async (config: AutopathConfig) => {
-		if (waypoints.length < 2 || !currentSite) return;
-		setAutopathRunning(true);
-		setAutopathResult(null);
-		try {
-			const res = await fetch(`/api/sites/${encodeURIComponent(currentSite)}/autopath`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					waypoints_xy: waypoints.map((w) => [w.x, w.y]),
-					...config,
-				}),
-			});
+	const handleAutodesign = useCallback(async (config: AutodesignConfig) => {
+			if (waypoints.length < 2 || !currentSite) return;
+			setAutodesignRunning(true);
+			setAutodesignResult(null);
+			try {
+				const res = await fetch(`/api/sites/${encodeURIComponent(currentSite)}/autodesign`, {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						waypoints_xy: waypoints.map((w) => [w.x, w.y]),
+						slope_weight: config.slope_weight,
+						sun_weight: config.sun_weight,
+						meteor_weight: config.meteor_weight,
+						path_mode: config.path_mode,
+						rover_friction_coeff: config.rover_friction_coeff,
+					}),
+				});
 			if (!res.ok) throw new Error(await res.text());
-			const data: AutopathResult = await res.json();
-			setAutopathResult(data);
+			const data: AutodesignResult = await res.json();
+			setAutodesignResult(data);
 		} catch (err) {
 			showError(err);
 		} finally {
-			setAutopathRunning(false);
+			setAutodesignRunning(false);
 		}
 	}, [waypoints, currentSite]);
 
@@ -99,7 +105,7 @@ function App() {
 		if (!currentSite) return;
 
 		const manualPath = waypoints.map((w) => [w.x, w.y] as [number, number]);
-		const autoPath = autopathResult?.path_xy as [number, number][] | undefined;
+		const autoPath = autodesignResult?.path_xy as [number, number][] | undefined;
 
 		if (manualPath.length < 2 && !autoPath) return;
 
@@ -145,11 +151,31 @@ function App() {
 		} finally {
 			setSimulating(false);
 		}
-	}, [currentSite, waypoints, autopathResult, roverSettings]);
+	}, [currentSite, waypoints, autodesignResult, roverSettings]);
 
 	const handleRoverChange = useCallback((settings: RoverSettings) => {
 		setRoverSettings(settings);
 	}, []);
+
+	const handleResultsResize = useCallback((e: React.MouseEvent) => {
+		e.preventDefault();
+		resizeRef.current = true;
+		const startY = e.clientY;
+		const startH = resultsHeight;
+		const onMove = (me: MouseEvent) => {
+			if (!resizeRef.current) return;
+			const dy = me.clientY - startY;
+			const newH = Math.max(100, Math.min(window.innerHeight * 0.8, startH - dy));
+			setResultsHeight(newH);
+		};
+		const onUp = () => {
+			resizeRef.current = false;
+			document.removeEventListener("mousemove", onMove);
+			document.removeEventListener("mouseup", onUp);
+		};
+		document.addEventListener("mousemove", onMove);
+		document.addEventListener("mouseup", onUp);
+	}, [resultsHeight]);
 
 	return (
 		<div className="app-layout">
@@ -161,11 +187,12 @@ function App() {
 							mapData={mapData}
 							status={status}
 							waypoints={waypoints}
-							autopathResult={autopathResult}
+							autodesignResult={autodesignResult}
 							onAddWaypoint={handleAddWaypoint}
 						/>
 					</div>
-					<div className="results-area">
+					<div className="resize-handle" onMouseDown={handleResultsResize} />
+					<div className="results-area" style={{ height: resultsHeight }}>
 						<SimulationResultsPanel
 							manualStats={manualStats}
 							autoStats={autoStats}
@@ -181,9 +208,9 @@ function App() {
 						waypoints={waypoints}
 						onAddWaypoint={handleAddWaypoint}
 						onRemoveWaypoint={handleRemoveWaypoint}
-						onAutopath={handleAutopath}
-						autopathRunning={autopathRunning}
-						autopathResult={autopathResult}
+						onAutodesign={handleAutodesign}
+						autodesignRunning={autodesignRunning}
+						autodesignResult={autodesignResult}
 						roverSettings={roverSettings}
 						onRoverChange={handleRoverChange}
 					/>

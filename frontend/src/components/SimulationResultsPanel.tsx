@@ -1,5 +1,13 @@
 import { useState } from "react";
-import type { SimulationStats } from "../types";
+import type { SimulationStats, TraversalSubscores } from "../types";
+import {
+	SCORE_MAX_PATH_EFFICIENCY,
+	SCORE_MAX_ENERGY_ECONOMY,
+	SCORE_MAX_ILLUMINATION,
+	SCORE_MAX_METEOR_SAFETY,
+	SCORE_MAX_TRACTION_MATCH,
+	SCORE_MAX_POWER_MATCH,
+} from "../constants";
 
 interface FieldDef {
 	label: string;
@@ -13,6 +21,33 @@ interface Props {
 	onSimulate: () => void;
 	simulating: boolean;
 }
+
+const GRADE_COLORS: Record<string, string> = {
+	S: "#ffd700",
+	A: "#4fc3f7",
+	B: "#81c784",
+	C: "#ffb74d",
+	D: "#e53935",
+	F: "#b71c1c",
+};
+
+const SUBSCORE_LABELS: Record<keyof TraversalSubscores, string> = {
+	path_efficiency: "Path Efficiency",
+	energy_economy: "Energy Economy",
+	illumination: "Illumination",
+	meteor_safety: "Meteor Safety",
+	rover_traction_match: "Traction Match",
+	rover_power_match: "Power Match",
+};
+
+const SUBSCORE_MAX: Record<keyof TraversalSubscores, number> = {
+	path_efficiency: SCORE_MAX_PATH_EFFICIENCY,
+	energy_economy: SCORE_MAX_ENERGY_ECONOMY,
+	illumination: SCORE_MAX_ILLUMINATION,
+	meteor_safety: SCORE_MAX_METEOR_SAFETY,
+	rover_traction_match: SCORE_MAX_TRACTION_MATCH,
+	rover_power_match: SCORE_MAX_POWER_MATCH,
+};
 
 const PATH_FIELDS: FieldDef[] = [
 	{ label: "Total distance", key: "total_distance_travelled", fmt: "{:.2f} m" },
@@ -61,20 +96,69 @@ const ROVER_FIELDS: FieldDef[] = [
 const INNER_TABS = ["Path", "Slope", "Environment", "Rover"] as const;
 const FIELD_GROUPS = [PATH_FIELDS, SLOPE_FIELDS, ENV_FIELDS, ROVER_FIELDS];
 
-function formatValue(val: number, fmt: string): string {
-	if (!isFinite(val)) return "N/A";
-	if (val > 1e100) return "N/A";
-	if (val < -1e100) return "N/A";
-	return val.toFixed(fmt.includes(".3f") ? 3 : 2);
+function asNum(v: string | number): number {
+	return typeof v === "number" ? v : parseFloat(v);
 }
 
-function formatTraversalTime(val: number): string {
-	if (!isFinite(val) || val <= 0) return "-";
-	if (val > 1e100) return "N/A";
-	if (val >= 86400) return (val / 86400).toFixed(2) + " days";
-	if (val >= 3600) return (val / 3600).toFixed(2) + " hr";
-	if (val >= 60) return (val / 60).toFixed(2) + " min";
-	return val.toFixed(2) + " s";
+function formatValue(val: string | number, fmt: string): string {
+	const n = asNum(val);
+	if (!isFinite(n)) return "N/A";
+	if (n > 1e100) return "N/A";
+	if (n < -1e100) return "N/A";
+	return n.toFixed(fmt.includes(".3f") ? 3 : 2);
+}
+
+function formatTraversalTime(val: string | number): string {
+	const n = asNum(val);
+	if (!isFinite(n) || n <= 0) return "-";
+	if (n > 1e100) return "N/A";
+	if (n >= 86400) return (n / 86400).toFixed(2) + " days";
+	if (n >= 3600) return (n / 3600).toFixed(2) + " hr";
+	if (n >= 60) return (n / 60).toFixed(2) + " min";
+	return n.toFixed(2) + " s";
+}
+
+function ScoreCard({ stats }: { stats: SimulationStats | null }) {
+	const score = stats?.["traversal_score"] as number | undefined;
+	const grade = stats?.["traversal_grade"] as string | undefined;
+	const subscores = stats?.["traversal_subscores"] as TraversalSubscores | undefined;
+
+	if (score == null || grade == null || !subscores) return null;
+
+	const color = GRADE_COLORS[grade] ?? "#888";
+	const barW = (v: number, max: number) => Math.min(100, (v / max) * 100);
+
+	return (
+		<div className="score-card">
+			<div className="score-main">
+				<span className="score-grade" style={{ color }}>
+					{grade}
+				</span>
+				<span className="score-total">
+					{Math.round(score)}<span className="score-denom">/1000</span>
+				</span>
+			</div>
+			<div className="score-bar-total">
+				<div className="score-bar-fill" style={{ width: `${barW(score, 1000)}%`, background: color }} />
+			</div>
+			<div className="score-subscores">
+				{(Object.keys(SUBSCORE_LABELS) as (keyof TraversalSubscores)[]).map((key) => {
+					const v = subscores[key];
+					const max = SUBSCORE_MAX[key];
+					const label = SUBSCORE_LABELS[key];
+					return (
+						<div key={key} className="subscore-row">
+							<span className="subscore-label">{label}</span>
+							<div className="subscore-bar">
+								<div className="subscore-fill" style={{ width: `${barW(v, max)}%` }} />
+							</div>
+							<span className="subscore-val">{Math.round(v)}</span>
+						</div>
+					);
+				})}
+			</div>
+		</div>
+	);
 }
 
 function FieldsTable({ fields, stats }: { fields: FieldDef[]; stats: SimulationStats | null }) {
@@ -82,9 +166,10 @@ function FieldsTable({ fields, stats }: { fields: FieldDef[]; stats: SimulationS
 		<table className="fields-table">
 			<tbody>
 				{fields.map((f) => {
-					const val = stats?.[f.key];
+					const raw = stats?.[f.key] as string | number | undefined;
+					const val = asNum(raw ?? 0);
 					let display = "-";
-					if (val != null && isFinite(val)) {
+					if (raw != null && isFinite(val)) {
 						if (f.key === "traverse_feasible") {
 							display = val >= 0.5 ? "Yes" : "No";
 						} else if (f.key === "traversal_time_s") {
@@ -94,7 +179,7 @@ function FieldsTable({ fields, stats }: { fields: FieldDef[]; stats: SimulationS
 						}
 					}
 					const feasibleClass =
-						f.key === "traverse_feasible" && val != null
+						f.key === "traverse_feasible" && raw != null
 							? val >= 0.5 ? " val-ok" : " val-bad"
 							: "";
 					return (
@@ -159,7 +244,9 @@ export default function SimulationResultsPanel({
 				</button>
 			</div>
 			<div className="results-status">{statusText}</div>
-			<div className="outer-tabs">
+			<div className="results-scroll">
+				<ScoreCard stats={activeStats} />
+				<div className="outer-tabs">
 				<button
 					className={`outer-tab ${outerTab === 0 ? "outer-tab-active" : ""}`}
 					onClick={() => setOuterTab(0)}
@@ -177,5 +264,6 @@ export default function SimulationResultsPanel({
 				<StatsTab stats={activeStats} />
 			</div>
 		</div>
-	);
+	</div>
+);
 }

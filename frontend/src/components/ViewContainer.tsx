@@ -1,18 +1,18 @@
 import { useCallback, useRef, useState } from "react";
 import MapView from "./MapView";
 import TerrainView from "./TerrainView";
-import type { MapPayload, Waypoint, AutopathResult } from "../types";
+import type { MapPayload, Waypoint, AutodesignResult } from "../types";
 import type { LoadStatus } from "../App";
 
 interface Props {
 	mapData: MapPayload | null;
 	status: LoadStatus;
 	waypoints: Waypoint[];
-	autopathResult: AutopathResult | null;
+	autodesignResult: AutodesignResult | null;
 	onAddWaypoint: (wp: Waypoint) => void;
 }
 
-export default function ViewContainer({ mapData, status, waypoints, autopathResult, onAddWaypoint }: Props) {
+export default function ViewContainer({ mapData, status, waypoints, autodesignResult, onAddWaypoint }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [splitPos, setSplitPos] = useState(50);
 
@@ -41,11 +41,11 @@ export default function ViewContainer({ mapData, status, waypoints, autopathResu
 	return (
 		<div ref={containerRef} className="view-container">
 			<div className="view-pane" style={{ width: `${splitPos}%` }}>
-				<MapView mapData={mapData} status={status} waypoints={waypoints} autopathResult={autopathResult} onAddWaypoint={onAddWaypoint} />
+				<MapView mapData={mapData} status={status} waypoints={waypoints} autodesignResult={autodesignResult} onAddWaypoint={onAddWaypoint} />
 			</div>
 			<div className="view-handle" onMouseDown={handleMouseDown} />
 			<div className="view-pane" style={{ width: `${100 - splitPos}%` }}>
-				<TerrainView mapData={mapData} status={status} waypoints={waypoints} autopathResult={autopathResult} />
+				<TerrainView mapData={mapData} status={status} waypoints={waypoints} autodesignResult={autodesignResult} />
 			</div>
 		</div>
 	);
