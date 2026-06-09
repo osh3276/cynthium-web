@@ -8,6 +8,15 @@ export const MAP_TYPES = [
 	"Average Temperature",
 ];
 
+// Scoring constants — must match backend simulation.py values
+// Max points per sub-score category (total should sum to 1000)
+export const SCORE_MAX_PATH_EFFICIENCY = 150;
+export const SCORE_MAX_ENERGY_ECONOMY = 300;
+export const SCORE_MAX_ILLUMINATION = 350;
+export const SCORE_MAX_METEOR_SAFETY = 50;
+export const SCORE_MAX_TRACTION_MATCH = 100;
+export const SCORE_MAX_POWER_MATCH = 50;
+
 export const SITE_PRESETS: Record<string, string> = {
 	"Haworth": "Haworth_5mpp_surf.tif",
 	"Shoemaker": "Shoemaker_5mpp_surf.tif",

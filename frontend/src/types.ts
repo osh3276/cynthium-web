@@ -38,17 +38,18 @@ export interface Waypoint {
 	y: number;
 }
 
-export interface AutopathResult {
+export interface AutodesignResult {
 	path_xy: number[][];
 	total_cost: number;
 	expanded: number;
 }
 
-export interface AutopathConfig {
-	min_slope_deg: number;
-	max_slope_deg: number;
+export interface AutodesignConfig {
 	slope_weight: number;
 	sun_weight: number;
+	meteor_weight: number;
+	path_mode: "segment" | "direct";
+	rover_friction_coeff: number;
 }
 
 export interface RoverSettings {
@@ -58,6 +59,21 @@ export interface RoverSettings {
 	rolling_resistance_coeff: number;
 }
 
+export interface TraversalSubscores {
+	path_efficiency: number;
+	energy_economy: number;
+	illumination: number;
+	meteor_safety: number;
+	rover_traction_match: number;
+	rover_power_match: number;
+}
+
+export interface TraversalScore {
+	traversal_score: number;
+	traversal_grade: string;
+	traversal_subscores: TraversalSubscores;
+}
+
 export interface SimulationStats {
-	[key: string]: number;
+	[key: string]: number | string;
 }
