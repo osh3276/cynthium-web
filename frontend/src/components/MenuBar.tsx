@@ -1,11 +1,17 @@
 import { useCallback, useRef, useState } from "react";
 
-export default function MenuBar() {
+interface Props {
+	onStartGame?: () => void;
+}
+
+export default function MenuBar({ onStartGame }: Props) {
 	return (
 		<div className="menubar">
 			<MenuDropdown label="File">
 				<MenuItemComp label="Open" shortcut="Ctrl+O" />
 				<MenuItemComp label="Export Simulation Data" shortcut="Ctrl+E" />
+				<MenuSeparator />
+				<MenuItemComp label="Start Game" onClick={onStartGame} />
 				<MenuSeparator />
 				<MenuItemComp label="Exit" shortcut="Ctrl+Q" />
 			</MenuDropdown>
@@ -52,13 +58,11 @@ function MenuDropdown({
 	);
 }
 
-function MenuItemComp({ label, shortcut }: { label: string; shortcut?: string }) {
+function MenuItemComp({ label, shortcut, onClick }: { label: string; shortcut?: string; onClick?: () => void }) {
 	return (
 		<button
 			className="menu-item"
-			onClick={() => {
-				/* placeholder */
-			}}
+			onClick={onClick}
 		>
 			<span>{label}</span>
 			{shortcut && <span className="menu-shortcut">{shortcut}</span>}

@@ -49,7 +49,10 @@ export interface AutodesignConfig {
 	sun_weight: number;
 	meteor_weight: number;
 	path_mode: "segment" | "direct";
+	rover_mass_kg: number;
+	rover_power_hp: number;
 	rover_friction_coeff: number;
+	rover_crr: number;
 }
 
 export interface RoverSettings {
@@ -76,4 +79,24 @@ export interface TraversalScore {
 
 export interface SimulationStats {
 	[key: string]: number | string;
+}
+
+export interface GameRound {
+	siteName: string;
+	mapType: string;
+	startPoint: Waypoint;
+	endPoint: Waypoint;
+	userPath: Waypoint[];
+	autoPath: number[][] | null;
+	userStats: SimulationStats | null;
+	autoStats: SimulationStats | null;
+	userScore: number;
+	autoScore: number;
+}
+
+export interface GameState {
+	active: boolean;
+	rounds: GameRound[];
+	currentRound: number;
+	finished: boolean;
 }

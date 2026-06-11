@@ -10,9 +10,11 @@ interface Props {
 	waypoints: Waypoint[];
 	autodesignResult: AutodesignResult | null;
 	onAddWaypoint: (wp: Waypoint) => void;
+	gameStartPoint?: Waypoint | null;
+	gameEndPoint?: Waypoint | null;
 }
 
-export default function ViewContainer({ mapData, status, waypoints, autodesignResult, onAddWaypoint }: Props) {
+export default function ViewContainer({ mapData, status, waypoints, autodesignResult, onAddWaypoint, gameStartPoint, gameEndPoint }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [splitPos, setSplitPos] = useState(50);
 
@@ -41,7 +43,7 @@ export default function ViewContainer({ mapData, status, waypoints, autodesignRe
 	return (
 		<div ref={containerRef} className="view-container">
 			<div className="view-pane" style={{ width: `${splitPos}%` }}>
-				<MapView mapData={mapData} status={status} waypoints={waypoints} autodesignResult={autodesignResult} onAddWaypoint={onAddWaypoint} />
+				<MapView mapData={mapData} status={status} waypoints={waypoints} autodesignResult={autodesignResult} onAddWaypoint={onAddWaypoint} gameStartPoint={gameStartPoint} gameEndPoint={gameEndPoint} />
 			</div>
 			<div className="view-handle" onMouseDown={handleMouseDown} />
 			<div className="view-pane" style={{ width: `${100 - splitPos}%` }}>
