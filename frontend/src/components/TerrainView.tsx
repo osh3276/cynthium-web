@@ -100,6 +100,24 @@ export default function TerrainView({ mapData, status, waypoints, autodesignResu
 		const ctx = sceneRef.current;
 		if (!ctx) return;
 
+		if (!mapData || status !== "loaded" || !mapData.height_data) {
+			if (ctx.mesh) {
+				ctx.scene.remove(ctx.mesh);
+				ctx.mesh.geometry.dispose();
+				if (Array.isArray(ctx.mesh.material)) {
+					ctx.mesh.material.forEach((m) => m.dispose());
+				} else {
+					ctx.mesh.material.dispose();
+				}
+				ctx.mesh = null;
+			}
+			return;
+		}
+
+		const shapeKey = mapData.downsampled_shape?.join(",") ?? "";
+		if (shapeKey === prevShapeKey.current && ctx.mesh) return;
+		prevShapeKey.current = shapeKey;
+
 		if (ctx.mesh) {
 			ctx.scene.remove(ctx.mesh);
 			ctx.mesh.geometry.dispose();
@@ -110,12 +128,6 @@ export default function TerrainView({ mapData, status, waypoints, autodesignResu
 			}
 			ctx.mesh = null;
 		}
-
-		if (!mapData || status !== "loaded" || !mapData.height_data) return;
-
-		const shapeKey = mapData.downsampled_shape?.join(",") ?? "";
-		if (shapeKey === prevShapeKey.current && ctx.mesh) return;
-		prevShapeKey.current = shapeKey;
 
 		const hdata = mapData.height_data;
 		const rows = hdata.length;

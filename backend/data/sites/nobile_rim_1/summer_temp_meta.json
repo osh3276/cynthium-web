@@ -1,0 +1,25 @@
+{
+  "transform": [
+    240.03595736281088,
+    0.0,
+    71410.6973154362,
+    0.0,
+    -240.03595736281088,
+    122538.35623371496
+  ],
+  "crs": "PROJCS[\"unknown\",GEOGCS[\"unknown\",DATUM[\"unknown\",SPHEROID[\"unknown\",1737400,0]],PRIMEM[\"Reference meridian\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Polar_Stereographic\"],PARAMETER[\"latitude_of_origin\",-90],PARAMETER[\"central_meridian\",0],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1],AXIS[\"Easting\",NORTH],AXIS[\"Northing\",NORTH]]",
+  "shape": [
+    104,
+    104
+  ],
+  "res": [
+    240.03595736281088,
+    -240.03595736281088
+  ],
+  "padded_bounds": [
+    71500.0,
+    97500.0,
+    96500.0,
+    122500.0
+  ]
+}

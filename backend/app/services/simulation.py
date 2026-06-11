@@ -1,61 +1,38 @@
+"""Rover simulation using pre-processed per-site data."""
+
 import time
 
 import numpy as np
-import rasterio
-from rasterio.windows import from_bounds
 
 from .rover_settings import RoverSettings
-from .site_rasters import (
-	COARSE_ELEVATION_PATH,
-	ILLUMINATION_PATH,
-	METEOR_PATH,
-	SUMMER_TEMP_PATH,
-	WINTER_TEMP_PATH,
-	_load_site_bounds,
-)
+from .site_rasters import load_site_data
 
 LUNAR_GRAVITY = 1.625  # m/s^2
 
 # ---------------------------------------------------------------------------
-# Scoring constants — tweak these to rebalance the traversal score
+# Scoring constants
 # ---------------------------------------------------------------------------
-# Max points per sub-score category (total should sum to 1000)
 SCORE_MAX_PATH_EFFICIENCY = 150
 SCORE_MAX_ENERGY_ECONOMY = 300
 SCORE_MAX_ILLUMINATION = 350
 SCORE_MAX_METEOR_SAFETY = 50
 SCORE_MAX_TRACTION_MATCH = 100
 SCORE_MAX_POWER_MATCH = 50
-
-# Expense subtracted from total: final = sum - expense * SCALE
-# expense = rover_power_hp + rover_mu^2 - rolling_resistance_coeff^2
-# Higher crr reduces expense (worse wheels = cheaper).
-# Autodesign keeps hp and crr at minimum, adjusts mu to meet budget.
 EXPENSE_SCALE = 100
-
-# Rover optimization tuning
-TRACTION_PEAK_RATIO = 0.7       # mu_required / mu_actual ratio that scores full marks
-POWER_PEAK_RATIO = 0.95         # achieved_v / v_ref ratio that scores full marks
-V_REF_CAP_MPS = 10.0            # max theoretical flat-ground speed considered
-
-# Grade thresholds
+TRACTION_PEAK_RATIO = 0.7
+POWER_PEAK_RATIO = 0.95
+V_REF_CAP_MPS = 10.0
 GRADE_S = 900
 GRADE_A = 750
 GRADE_B = 600
 GRADE_C = 450
 GRADE_D = 300
 FAILURE_HARD_CAP = 250.0
-
-# Rover defaults for fallback
 DEFAULT_ROVER_MASS_KG = 150.0
 DEFAULT_ROVER_POWER_HP = 0.2
 DEFAULT_ROVER_CRR = 0.1
 HP_TO_W = 745.7
 
-
-# ---------------------------------------------------------------------------
-# Path sampling (ported from cynthium path_sampling.py)
-# ---------------------------------------------------------------------------
 
 def get_pixel_resolution_m(transform) -> float:
 	return float(min(abs(transform.a), abs(transform.e)))
@@ -83,11 +60,9 @@ def sample_path_elevations(
 		for sample_index in range(segment_sample_count + 1):
 			fraction = sample_index / segment_sample_count
 			current_xy = start_point[:2] + fraction * (end_point[:2] - start_point[:2])
-
 			col, row = inverse_transform * (float(current_xy[0]), float(current_xy[1]))
 			col_i = _clamp_index(int(round(col)), elevation_map.shape[1])
 			row_i = _clamp_index(int(round(row)), elevation_map.shape[0])
-
 			elevation = float(elevation_map[row_i, col_i])
 			sampled_points.append([float(current_xy[0]), float(current_xy[1]), elevation])
 
@@ -96,17 +71,12 @@ def sample_path_elevations(
 		mask = np.any(np.diff(sampled_points_arr, axis=0) != 0, axis=1)
 		mask = np.append(mask, True)
 		sampled_points_arr = sampled_points_arr[mask]
-
 	return sampled_points_arr
 
 
 def _clamp_index(index: int, size: int) -> int:
 	return max(0, min(index, size - 1))
 
-
-# ---------------------------------------------------------------------------
-# Rover physics (ported from cynthium rover_physics.py)
-# ---------------------------------------------------------------------------
 
 def simulate_rover_over_path(
 	*,
@@ -120,15 +90,7 @@ def simulate_rover_over_path(
 	v0_mps: float = 0.0,
 	v_min_power_mps: float = 0.05,
 ) -> dict[str, float]:
-	"""Simple 1D dynamics along a polyline.
-
-	Assumptions:
-	- Rover is always at max throttle (power-limited: F = P/v).
-	- Tractive force is capped by wheel/ground friction: F <= μN.
-	- Downhill can accelerate from gravity; velocity carries into later segments.
-	- No braking and no speed cap.
-	- Illumination energy integrates E = ∫ I dt (J/m^2) using segment midpoints.
-	"""
+	"""Simple 1D dynamics along a polyline."""
 	if pts_xyz.shape[0] < 2:
 		return {
 			"traverse_feasible": 1.0,
@@ -162,7 +124,6 @@ def simulate_rover_over_path(
 	t_total = 0.0
 	d_total = 0.0
 	energy_j_per_m2 = 0.0
-
 	min_v = float("inf")
 	max_v = 0.0
 
@@ -172,19 +133,14 @@ def simulate_rover_over_path(
 			continue
 
 		th = float(theta[i])
-
 		f_n = m * g * abs(np.cos(th))
 		f_trac_max = mu * f_n
-
 		v_eff = max(float(v), float(v_min_power_mps))
 		f_power = p_w / v_eff
 		f_drive = min(f_power, f_trac_max)
-
 		f_grade = m * g * np.sin(th)
-
 		c_rr = float(rover.rolling_resistance_coeff)
 		f_roll = c_rr * f_n
-
 		f_net = f_drive - f_grade - f_roll
 		a = f_net / m
 
@@ -198,23 +154,17 @@ def simulate_rover_over_path(
 				dt = (v / (-a)) if v > 0.0 else 0.0
 				d_total += float(s_stop)
 				t_total += float(dt)
-
 				if inv_illum is not None and dt > 0.0:
 					xy_mid = 0.5 * (pts_xyz[i, :2] + pts_xyz[i + 1, :2])
 					col, row = inv_illum * (float(xy_mid[0]), float(xy_mid[1]))
 					ci = int(round(col))
 					ri = int(round(row))
-					if (
-						0 <= ri < illumination_map.shape[0]
-						and 0 <= ci < illumination_map.shape[1]
-					):
+					if 0 <= ri < illumination_map.shape[0] and 0 <= ci < illumination_map.shape[1]:
 						illum = float(illumination_map[ri, ci])
 						if np.isfinite(illum):
 							energy_j_per_m2 += illum * float(dt)
-
 				min_v = min(min_v, 0.0)
 				max_v = max(max_v, float(v))
-
 				return {
 					"traverse_feasible": 0.0,
 					"traversal_time_s": float("inf"),
@@ -228,10 +178,8 @@ def simulate_rover_over_path(
 		v_next = float(np.sqrt(v_sq_next))
 		den = float(v + v_next)
 		dt = (2.0 * s / den) if den > 0.0 else 0.0
-
 		d_total += s
 		t_total += float(dt)
-
 		v_mid = 0.5 * (float(v) + float(v_next))
 		min_v = min(min_v, float(v_mid))
 		max_v = max(max_v, float(v_mid))
@@ -269,10 +217,6 @@ def simulate_rover_over_path(
 	}
 
 
-# ---------------------------------------------------------------------------
-# Rover dynamics (ported from cynthium rover_dynamics.py)
-# ---------------------------------------------------------------------------
-
 def _compute_required_mu_dynamic(
 	*,
 	pts_xyz: np.ndarray,
@@ -283,8 +227,7 @@ def _compute_required_mu_dynamic(
 	tol: float = 1e-3,
 	max_iter: int = 30,
 ) -> float:
-	"""Find the minimum μ that makes the traverse feasible under the same physics model."""
-
+	"""Find the minimum μ that makes the traverse feasible."""
 	def feasible(mu_test: float) -> bool:
 		out = simulate_rover_over_path(
 			pts_xyz=pts_xyz,
@@ -319,7 +262,6 @@ def _compute_required_mu_dynamic(
 			hi = mid
 		else:
 			lo = mid
-
 	return float(hi)
 
 
@@ -390,21 +332,13 @@ def compute_traversal_dynamics(
 		"max_velocity_mps": float(physics["max_velocity_mps"]),
 		"traversal_time_s": float(physics["traversal_time_s"]),
 		"solar_energy_per_m2_j": float(physics["solar_energy_per_m2_j"]),
-		"avg_solar_illumination_w_per_m2": float(
-			physics["avg_solar_illumination_w_per_m2"]
-		),
+		"avg_solar_illumination_w_per_m2": float(physics["avg_solar_illumination_w_per_m2"]),
 		"max_climbable_slope_deg": max_climbable,
 		"traverse_feasible": float(physics["traverse_feasible"]),
 		"required_wheel_friction_coeff": float(required_mu_dynamic),
-		"required_climb_slope_deg": float(
-			np.degrees(np.arctan(required_mu_dynamic))
-		),
+		"required_climb_slope_deg": float(np.degrees(np.arctan(required_mu_dynamic))),
 	}
 
-
-# ---------------------------------------------------------------------------
-# Path stats (ported from cynthium stats.py)
-# ---------------------------------------------------------------------------
 
 EMPTY_PATH_STATS = {
 	"total_distance": 0.0,
@@ -435,7 +369,6 @@ def _sample_raster_values(
 ) -> np.ndarray:
 	if raster is None or transform is None or points_xy.size == 0:
 		return np.array([], dtype=np.float32)
-
 	inverse_transform = ~transform
 	values = []
 	for x, y in points_xy:
@@ -446,7 +379,6 @@ def _sample_raster_values(
 			value = raster[row, col]
 			if np.isfinite(value):
 				values.append(float(value))
-
 	return np.array(values, dtype=np.float32)
 
 
@@ -456,7 +388,6 @@ def _calculate_stats_from_points(points: np.ndarray) -> dict[str, float]:
 	z_diffs = diffs[:, 2]
 	total_distance_travelled = float(np.sum(step_distances))
 	total_displacement = float(np.linalg.norm(points[-1] - points[0]))
-
 	return {
 		"total_distance": total_distance_travelled,
 		"total_distance_travelled": total_distance_travelled,
@@ -476,11 +407,7 @@ def _add_context_stats(
 	meteor_map: np.ndarray | None = None,
 	meteor_transform=None,
 ):
-	temperature_values = _sample_raster_values(
-		points_xy,
-		temperature_map,
-		temperature_transform,
-	)
+	temperature_values = _sample_raster_values(points_xy, temperature_map, temperature_transform)
 	if temperature_values.size:
 		stats["max_temperature"] = float(np.max(temperature_values))
 		stats["min_temperature"] = float(np.min(temperature_values))
@@ -490,22 +417,14 @@ def _add_context_stats(
 		stats["min_temperature"] = 0.0
 		stats["average_temperature"] = 0.0
 
-	illumination_values = _sample_raster_values(
-		points_xy,
-		illumination_map,
-		illumination_transform,
-	)
+	illumination_values = _sample_raster_values(points_xy, illumination_map, illumination_transform)
 	if illumination_values.size:
 		illuminated_count = np.count_nonzero(illumination_values > 0)
-		stats["percent_illumination"] = float(
-			illuminated_count / illumination_values.size * 100.0
-		)
+		stats["percent_illumination"] = float(illuminated_count / illumination_values.size * 100.0)
 	else:
 		stats["percent_illumination"] = 0.0
 
-	meteor_values = _sample_raster_values(
-		points_xy, meteor_map, meteor_transform
-	)
+	meteor_values = _sample_raster_values(points_xy, meteor_map, meteor_transform)
 	if meteor_values.size:
 		stats["average_meteor_flux"] = float(np.mean(meteor_values))
 		stats["max_meteor_flux"] = float(np.max(meteor_values))
@@ -532,12 +451,10 @@ def _calculate_integrated_stats(
 	stats = _calculate_stats_from_points(sampled_points)
 	stats["average_resolution"] = get_pixel_resolution_m(transform)
 
-	# Traversal slope
 	if len(sampled_points) > 1:
 		diffs = np.diff(sampled_points, axis=0)
 		horizontal_distances = np.linalg.norm(diffs[:, :2], axis=1)
 		z_diffs = diffs[:, 2]
-
 		mask = horizontal_distances > 0
 		if np.any(mask):
 			slopes = np.degrees(np.arctan2(z_diffs[mask], horizontal_distances[mask]))
@@ -553,7 +470,6 @@ def _calculate_integrated_stats(
 		stats["max_slope"] = 0.0
 		stats["min_slope"] = 0.0
 
-	# Surface slope from slope raster
 	slope_values = _sample_raster_values(sampled_points[:, :2], slope_map, transform)
 	if slope_values.size > 0:
 		stats["surface_average_slope"] = float(np.mean(slope_values))
@@ -567,12 +483,9 @@ def _calculate_integrated_stats(
 	_add_context_stats(
 		stats,
 		sampled_points[:, :2],
-		temperature_map,
-		temperature_transform,
-		illumination_map,
-		illumination_transform,
-		meteor_map,
-		meteor_transform,
+		temperature_map, temperature_transform,
+		illumination_map, illumination_transform,
+		meteor_map, meteor_transform,
 	)
 	return stats
 
@@ -594,101 +507,73 @@ def calculate_path_stats(
 
 	if elevation_map is not None and transform is not None:
 		return _calculate_integrated_stats(
-			points,
-			elevation_map,
-			transform,
-			slope_map,
-			temperature_map,
-			temperature_transform,
-			illumination_map,
-			illumination_transform,
-			meteor_map,
-			meteor_transform,
+			points, elevation_map, transform,
+			slope_map, temperature_map, temperature_transform,
+			illumination_map, illumination_transform,
+			meteor_map, meteor_transform,
 		)
 
 	stats = _calculate_stats_from_points(points)
 	_add_context_stats(
-		stats,
-		points[:, :2],
-		temperature_map,
-		temperature_transform,
-		illumination_map,
-		illumination_transform,
-		meteor_map,
-		meteor_transform,
+		stats, points[:, :2],
+		temperature_map, temperature_transform,
+		illumination_map, illumination_transform,
+		meteor_map, meteor_transform,
 	)
 	return stats
 
 
-# ---------------------------------------------------------------------------
-# Site-level raster loading
-# ---------------------------------------------------------------------------
-
-def _crop_raster_sim(source_path, bounds: dict) -> tuple[np.ndarray, dict] | None:
-	"""Crop a raster to site bounds. Returns (data, meta) or None."""
-	crop_bounds = (bounds["left"], bounds["bottom"], bounds["right"], bounds["top"])
-	try:
-		with rasterio.open(str(source_path)) as src:
-			window = from_bounds(*crop_bounds, transform=src.transform)
-			window = window.round_offsets().round_lengths()
-			if window.width <= 0 or window.height <= 0:
-				return None
-			data = src.read(
-				1,
-				window=window,
-				boundless=True,
-				fill_value=src.nodata if src.nodata is not None else float("nan"),
-			).astype(np.float32)
-			meta = {"transform": src.window_transform(window), "crs": src.crs}
-		return data, meta
-	except Exception:
-		return None
-
-
-def load_site_rasters(site_name: str) -> dict | None:
-	"""Load all rasters needed for simulation, cropped to the site bounds.
-
-	Returns a dict with keys: elevation, elevation_meta, slope, temperature,
-	temperature_meta, illumination, illumination_meta, meteor, meteor_meta.
-	Returns None if the site or elevation raster isn't found.
-	"""
-	bounds_dict = _load_site_bounds()
-	if site_name not in bounds_dict:
-		return None
-
-	bounds = bounds_dict[site_name]
-
-	elev = _crop_raster_sim(COARSE_ELEVATION_PATH, bounds)
-	if elev is None:
-		return None
-	elev_data, elev_meta = elev
-
-	# Slope computed from elevation
+def _compute_slope_from_elevation(elev_data: np.ndarray) -> np.ndarray:
+	"""Compute slope in degrees from elevation data (assumes ~40m resolution)."""
 	padded = np.pad(np.where(np.isfinite(elev_data), elev_data, 0), 1, mode="edge")
 	gx, gy = np.gradient(padded, 40.0, 40.0)
 	gx = gx[1:-1, 1:-1]
 	gy = gy[1:-1, 1:-1]
-	slope_data = np.degrees(np.arctan(np.sqrt(gx**2 + gy**2)))
-	slope_data[~np.isfinite(elev_data)] = 0
+	slope = np.degrees(np.arctan(np.sqrt(gx**2 + gy**2)))
+	slope[~np.isfinite(elev_data)] = 0
+	return slope
 
-	illum = _crop_raster_sim(ILLUMINATION_PATH, bounds)
-	illum_data, illum_meta = illum if illum else (None, None)
 
-	meteor = _crop_raster_sim(METEOR_PATH, bounds)
-	meteor_data, meteor_meta = meteor if meteor else (None, None)
+def load_site_rasters(site_name: str) -> dict | None:
+	"""Load all pre-processed rasters for a site.
 
-	# Average of summer and winter temperatures
-	summer = _crop_raster_sim(SUMMER_TEMP_PATH, bounds)
-	winter = _crop_raster_sim(WINTER_TEMP_PATH, bounds)
-	temp_data = None
-	temp_meta = None
-	if summer is not None and winter is not None:
-		temp_data = (summer[0] + winter[0]) / 2.0
-		temp_meta = summer[1]
-	elif summer is not None:
-		temp_data, temp_meta = summer
-	elif winter is not None:
-		temp_data, temp_meta = winter
+	Returns a dict with keys: elevation, elevation_meta, slope, temperature,
+	temperature_meta, illumination, illumination_meta, meteor, meteor_meta.
+	"""
+	site_data = load_site_data(site_name)
+	if site_data is None:
+		return None
+
+	elev_data = site_data["elevation"]
+	elev_meta = site_data["elevation_meta"]
+	if elev_data is None:
+		return None
+
+	# Compute slope from elevation
+	slope_data = _compute_slope_from_elevation(elev_data)
+
+	illum_data = site_data.get("illumination")
+	illum_meta = site_data.get("illumination_meta")
+
+	meteor_data = site_data.get("meteor")
+	meteor_meta = site_data.get("meteor_meta")
+
+	# Average temperature
+	s_data = site_data.get("summer_temp")
+	w_data = site_data.get("winter_temp")
+	if s_data is not None and w_data is not None:
+		temp_data = (s_data + w_data) / 2.0
+		# Use summer meta as proxy for temp meta
+		temp_meta = site_data.get("summer_temp_meta")
+	elif s_data is not None:
+		temp_data = s_data
+		temp_meta = site_data.get("summer_temp_meta")
+	elif w_data is not None:
+		temp_data = w_data
+		temp_meta = site_data.get("winter_temp_meta")
+	else:
+		temp_data = None
+		temp_meta = None
 
 	return {
 		"elevation": elev_data,
@@ -703,26 +588,15 @@ def load_site_rasters(site_name: str) -> dict | None:
 	}
 
 
-# ---------------------------------------------------------------------------
-# Top-level simulation entry point
-# ---------------------------------------------------------------------------
-
 def compute_traversal_score(stats: dict[str, float]) -> dict:
-	"""Compute traversal score (0-1000) with sub-scores and letter grade.
-
-	Failed traversals (traverse_feasible = 0) hard-cap at FAILURE_HARD_CAP, always F.
-	All max values come from the SCORE_MAX_* constants defined at the top of this file.
-	"""
+	"""Compute traversal score (0-1000) with sub-scores and letter grade."""
 	g = LUNAR_GRAVITY
 	feasible = stats.get("traverse_feasible", 1.0) >= 0.5
 
-	# -- 1. Path Efficiency --
 	distance = stats.get("total_distance_travelled", 1.0)
 	displacement = stats.get("total_displacement", 0.0)
 	path_eff = SCORE_MAX_PATH_EFFICIENCY * max(0.0, min(1.0, displacement / max(distance, 1.0)))
 
-	# -- 2. Energy Economy --
-	# Compare actual avg velocity to rover's theoretical flat-ground top speed
 	mass = stats.get("rover_mass_kg", DEFAULT_ROVER_MASS_KG)
 	power_w = stats.get("rover_power_hp", DEFAULT_ROVER_POWER_HP) * HP_TO_W
 	crr = stats.get("rover_crr", DEFAULT_ROVER_CRR)
@@ -731,15 +605,11 @@ def compute_traversal_score(stats: dict[str, float]) -> dict:
 	avg_v = stats.get("average_velocity_mps", 0.0)
 	energy_eco = SCORE_MAX_ENERGY_ECONOMY * max(0.0, min(1.0, avg_v / max(v_ref, 0.01)))
 
-	# -- 3. Illumination --
-	# Composite: 70% path coverage in sunlight + 30% solar intensity during traversal
 	illum_pct = stats.get("percent_illumination", 0.0) / 100.0
 	avg_illum = stats.get("avg_solar_illumination_w_per_m2", 0.0)
 	solar_intensity = max(0.0, min(1.0, avg_illum / 200.0))
 	illumination = SCORE_MAX_ILLUMINATION * max(0.0, min(1.0, 0.7 * illum_pct + 0.3 * solar_intensity))
 
-	# -- 4. Rover Optimization --
-	# Traction match: how well actual mu matches what the path requires
 	required_mu = stats.get("required_wheel_friction_coeff", 0.0)
 	actual_mu = stats.get("rover_mu", 0.0)
 	if actual_mu <= 0.01:
@@ -749,42 +619,33 @@ def compute_traversal_score(stats: dict[str, float]) -> dict:
 	else:
 		ratio = required_mu / actual_mu
 		if ratio > 1.0:
-			traction_match = float(SCORE_MAX_TRACTION_MATCH) * 0.5  # undergunned but survived
+			traction_match = float(SCORE_MAX_TRACTION_MATCH) * 0.5
 		else:
 			traction_match = SCORE_MAX_TRACTION_MATCH * max(0.0, min(1.0, ratio / TRACTION_PEAK_RATIO))
 
-	# Power match: actual speed vs theoretical potential
 	if v_flat_max <= 0.01:
 		power_match = 0.0
 	elif avg_v >= v_ref * POWER_PEAK_RATIO:
 		power_match = float(SCORE_MAX_POWER_MATCH)
 	else:
 		power_match = SCORE_MAX_POWER_MATCH * max(0.0, min(1.0, avg_v / max(v_ref * POWER_PEAK_RATIO, 0.01)))
-
 	rover_opt = traction_match + power_match
 
-	# -- 5. Meteor Safety --
 	avg_meteor = stats.get("average_meteor_flux", 0.0)
 	meteor_safety = SCORE_MAX_METEOR_SAFETY * max(0.0, min(1.0, 1.0 - avg_meteor / 5000.0))
 
-	# -- 6. Rover Expense penalty --
-	# Subtracted from total. expense = hp + mu² - crr²
 	_hp = stats.get("rover_power_hp", DEFAULT_ROVER_POWER_HP)
 	_mu = stats.get("rover_mu", 0.6)
 	_crr = stats.get("rover_crr", DEFAULT_ROVER_CRR)
 	expense = _hp + _mu * _mu - _crr * _crr
 	expense_penalty = expense * EXPENSE_SCALE
 
-	# -- Total (expense subtracted) --
 	total = path_eff + energy_eco + illumination + rover_opt + meteor_safety - expense_penalty
 
-	# Hard-cap for failed traversals
 	if not feasible:
 		total = min(total, FAILURE_HARD_CAP)
-
 	total = max(0.0, min(1000.0, total))
 
-	# Grade
 	if total >= GRADE_S:
 		grade = "S"
 	elif total >= GRADE_A:
@@ -813,7 +674,6 @@ def compute_traversal_score(stats: dict[str, float]) -> dict:
 
 
 def _sanitize_float(v: float) -> float:
-	"""Replace non-finite floats with safe sentinels for JSON serialization."""
 	if np.isnan(v):
 		return 0.0
 	if np.isposinf(v):
@@ -835,7 +695,6 @@ def _sanitize_stats(stats: dict) -> dict:
 		elif v is None:
 			sanitized[k] = 0.0
 		else:
-			# bool, list, etc. — pass through as-is
 			sanitized[k] = v
 	return sanitized
 

@@ -63,6 +63,7 @@ function App() {
 	const [simulating, setSimulating] = useState(false);
 	const [resultsHeight, setResultsHeight] = useState(200);
 	const resizeRef = useRef<boolean>(false);
+	const loadedSiteRef = useRef("");
 
 	// Game state
 	const [gameState, setGameState] = useState<GameState | null>(null);
@@ -72,9 +73,13 @@ function App() {
 	const [showGameFinish, setShowGameFinish] = useState(false);
 
 	const loadSiteMap = useCallback(async (siteName: string, mapType: string, date: string) => {
+		const siteChanged = siteName !== loadedSiteRef.current;
+		loadedSiteRef.current = siteName;
 		setCurrentSite(siteName);
 		setStatus("loading");
-		setWaypoints([]);
+		if (siteChanged) {
+			setWaypoints([]);
+		}
 		setAutodesignResult(null);
 		setManualStats(null);
 		setAutoStats(null);

@@ -11,7 +11,7 @@ DATA_DIR = HERE / "data"
 KERNELS = [
 	"naif0012.tls",
 	"pck00011.tpc",
-	"de430.bsp",
+	"de432s.bsp",
 	"moon_de440_250416.tf",
 	"moon_pa_de440_200625.bpc",
 ]

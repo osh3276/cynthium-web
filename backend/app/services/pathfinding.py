@@ -1,23 +1,21 @@
+"""Pathfinding with pre-processed per-site data (no raw GeoTIFF I/O)."""
+
 from __future__ import annotations
 
 import math
-import re
 import time
 from collections import deque
 from pathlib import Path
 
 import numpy as np
-import rasterio
-from rasterio.windows import from_bounds
 
 from .rover_settings import RoverSettings
 from .simulation import run_simulation
-from .site_rasters import (
-	COARSE_ELEVATION_PATH,
-	ILLUMINATION_PATH,
-	METEOR_PATH,
-	_load_site_bounds,
-)
+from .site_rasters import _load_site_bounds, load_site_data
+
+HERE = Path(__file__).resolve().parent.parent.parent
+_SNAP_RADIUS = 200
+_MIN_TRAV_NEIGHBORS = 1
 
 
 def _dijkstra(
@@ -29,9 +27,7 @@ def _dijkstra(
 	res_x: float,
 	res_y: float,
 ) -> dict | None:
-	"""A* with 16-directional movement and admissible straight-line heuristic.
-	Heap-based — fast. Checks intermediate cells for distance-2 jumps.
-	"""
+	"""A* with 16-directional movement and admissible straight-line heuristic."""
 	import heapq
 
 	H, W = traversable.shape
@@ -54,7 +50,6 @@ def _dijkstra(
 	def heuristic(r, c):
 		return math.hypot(float(gc - c) * res_x, float(gr - r) * res_y)
 
-	# 16 directions: 8 primary + 8 knight moves
 	dirs = [
 		(-1,0), (1,0), (0,-1), (0,1),
 		(-1,-1), (-1,1), (1,-1), (1,1),
@@ -79,7 +74,6 @@ def _dijkstra(
 				continue
 			if not bool(traversable[nr, nc]):
 				continue
-			# For knight moves (2,1 or 1,2), check traversable of intermediate cell
 			if max(abs(dr), abs(dc)) == 2:
 				mr = r + dr // 2 if abs(dr) == 2 else r
 				mc = c + dc // 2 if abs(dc) == 2 else c
@@ -117,20 +111,14 @@ def _dijkstra(
 	path.reverse()
 	return {"path_rc": path, "total_cost": float(g_cost[gr, gc]), "expanded": expanded}
 
-HERE = Path(__file__).resolve().parent.parent.parent
-_SNAP_RADIUS = 200
-_MIN_TRAV_NEIGHBORS = 1
-
 
 def _snap_to_traversable(
 	rc: tuple[int, int],
 	traversable: np.ndarray,
 	max_radius: int = _SNAP_RADIUS,
 ) -> tuple[int, int] | None:
-	"""BFS from rc to find the nearest traversable cell with enough traversable neighbors."""
 	r, c = int(rc[0]), int(rc[1])
 	H, W = traversable.shape
-
 	dirs = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
 
 	def _neighbor_count(cr: int, cc: int) -> int:
@@ -160,7 +148,6 @@ def _snap_to_traversable(
 			if 0 <= nr < H and 0 <= nc < W and not seen[nr, nc]:
 				seen[nr, nc] = True
 				q.append((nr, nc, d + 1))
-
 	return None
 
 
@@ -179,15 +166,14 @@ def compute_autodesign(
 	rover_friction_coeff: float = 0.6,
 	rover_crr: float = 0.1,
 ) -> dict:
-	"""Compute a path and validate it via simulation with the rover params.
-	If the path fails the traversal, reroute with failed cells blocked.
-	"""
+	"""Compute a path and validate it via simulation with the rover params."""
 	t_start = time.perf_counter()
 	rover_mu = rover_friction_coeff
 	max_climbable = max(1.0, math.degrees(math.atan(rover_mu)))
 
-	bounds_dict = _load_site_bounds()
-	if site_name not in bounds_dict:
+	sites = _load_site_bounds()
+	found = any(s["name"] == site_name for s in sites)
+	if not found:
 		return {"error": f"Site '{site_name}' not found"}
 
 	if len(waypoints_xy) < 2:
@@ -205,6 +191,7 @@ def compute_autodesign(
 	for attempt in range(10):
 		all_xy: list[tuple[float, float]] = []
 		seg_kw = dict(
+			site_name=site_name,
 			min_slope_deg=0.0,
 			max_slope_deg=max_climbable,
 			slope_weight=slope_weight,
@@ -239,7 +226,7 @@ def compute_autodesign(
 
 		site_path_xy = [[float(x), float(y)] for x, y in all_xy]
 
-		# Validate path with simulation using actual rover params and high-res data
+		# Validate path with simulation
 		rover = RoverSettings(
 			mass_kg=rover_mass_kg,
 			power_hp=rover_power_hp,
@@ -257,16 +244,17 @@ def compute_autodesign(
 			print(f"[TIMER] Autodesign {elapsed:.1f}s attempt={attempt+1} | site={site_name} wps={len(waypoints_xy)} mode={path_mode} μ={rover_mu} → feasible")
 			return {"path_xy": site_path_xy, "total_cost": 0.0, "expanded": 0}
 
-		# Block the failed path and retry
-		with rasterio.open(str(COARSE_ELEVATION_PATH)) as src:
-			inv = ~src.transform
+		# Block the failed path and retry using the site's elevation transform
+		site_data = load_site_data(site_name)
+		if site_data and site_data.get("elevation_meta"):
+			tf = site_data["elevation_meta"]["transform"]
+			inv = ~tf
 			for x, y in all_xy:
 				c, r = inv * (float(x), float(y))
 				blocked_pixels.add((int(round(r)), int(round(c))))
 
 		print(f"[TIMER] Autodesign attempt {attempt+1} infeasible, retrying with {len(blocked_pixels)} cells blocked")
 
-	# All 10 attempts failed
 	elapsed = time.perf_counter() - t_start
 	print(f"[TIMER] Autodesign {elapsed:.1f}s | gave up after 10 attempts")
 	return {"error": "No traversable path found after 10 attempts — the rover cannot handle this terrain with the current settings"}
@@ -274,6 +262,7 @@ def compute_autodesign(
 
 def _compute_segment(
 	*,
+	site_name: str,
 	start_xy: tuple[float, float],
 	goal_xy: tuple[float, float],
 	min_slope_deg: float,
@@ -285,118 +274,128 @@ def _compute_segment(
 	max_expanded: int,
 	blocked_pixels: set | None = None,
 ) -> tuple[list[tuple[float, float]] | None, str | None]:
-	"""Compute a single Theta* segment. Returns (path, error_message)."""
-	with rasterio.open(str(COARSE_ELEVATION_PATH)) as src:
-		transform = src.transform
-		inv = ~transform
+	"""Compute a single segment using pre-processed per-site data."""
+	site_data = load_site_data(site_name)
+	if site_data is None or site_data["elevation"] is None:
+		return None, f"no data for site '{site_name}'"
 
-		sc_f, sr_f = inv * (float(start_xy[0]), float(start_xy[1]))
-		gc_f, gr_f = inv * (float(goal_xy[0]), float(goal_xy[1]))
-		sr = int(round(float(sr_f)))
-		sc = int(round(float(sc_f)))
-		gr = int(round(float(gr_f)))
-		gc = int(round(float(gc_f)))
+	elev = site_data["elevation"]
+	elev_meta = site_data["elevation_meta"]
+	transform = elev_meta["transform"]
+	inv = ~transform
 
-		H = int(src.height)
-		W = int(src.width)
+	H, W = elev.shape
 
-		if not (0 <= sc < W and 0 <= sr < H):
-			return None, f"start ({start_xy[0]:.1f}, {start_xy[1]:.1f}) outside elevation raster"
-		if not (0 <= gc < W and 0 <= gr < H):
-			return None, f"goal ({goal_xy[0]:.1f}, {goal_xy[1]:.1f}) outside elevation raster"
+	sc_f, sr_f = inv * (float(start_xy[0]), float(start_xy[1]))
+	gc_f, gr_f = inv * (float(goal_xy[0]), float(goal_xy[1]))
+	sr = int(round(float(sr_f)))
+	sc = int(round(float(sc_f)))
+	gr = int(round(float(gr_f)))
+	gc = int(round(float(gc_f)))
 
-		dr = abs(gr - sr)
-		dc = abs(gc - sc)
-		dist_cells = int(max(dr, dc))
-		pad = int(max(50, min(pad_cells, dist_cells * 0.5 + 50)))
+	if not (0 <= sc < W and 0 <= sr < H):
+		return None, f"start ({start_xy[0]:.1f}, {start_xy[1]:.1f}) outside site elevation"
+	if not (0 <= gc < W and 0 <= gr < H):
+		return None, f"goal ({goal_xy[0]:.1f}, {goal_xy[1]:.1f}) outside site elevation"
 
-		r0 = max(0, min(sr, gr) - pad)
-		r1 = min(H, max(sr, gr) + pad + 1)
-		c0 = max(0, min(sc, gc) - pad)
-		c1 = min(W, max(sc, gc) + pad + 1)
+	dr = abs(gr - sr)
+	dc = abs(gc - sc)
+	dist_cells = int(max(dr, dc))
+	pad = int(max(50, min(pad_cells, dist_cells * 0.5 + 50)))
 
-		win_h = int(r1 - r0)
-		win_w = int(c1 - c0)
-		max_nodes = 500000
-		area = win_h * win_w
-		stride = 1
-		if area > max_nodes:
-			stride = int(math.ceil(math.sqrt(float(area) / float(max_nodes))))
-			stride = max(1, stride)
+	r0 = max(0, min(sr, gr) - pad)
+	r1 = min(H, max(sr, gr) + pad + 1)
+	c0 = max(0, min(sc, gc) - pad)
+	c1 = min(W, max(sc, gc) + pad + 1)
 
-		elev = src.read(
-			1,
-			window=rasterio.windows.Window(int(c0), int(r0), int(c1 - c0), int(r1 - r0)),
-		).astype(np.float32)
-		elev = elev[::stride, ::stride]
+	win_h = int(r1 - r0)
+	win_w = int(c1 - c0)
+	max_nodes = 500000
+	area = win_h * win_w
+	stride = 1
+	if area > max_nodes:
+		stride = int(math.ceil(math.sqrt(float(area) / float(max_nodes))))
+		stride = max(1, stride)
+
+	# Extract window from pre-cropped elevation
+	elev_win = elev[r0:r1, c0:c1].copy().astype(np.float32)
+	elev_win = elev_win[::stride, ::stride]
 
 	px_res_x = float(abs(transform.a))
 	px_res_y = float(abs(transform.e))
 
-	_elev_filled = np.where(np.isfinite(elev), elev, 0)
+	# Compute slope from elevation window
+	_elev_filled = np.where(np.isfinite(elev_win), elev_win, 0)
 	_padded = np.pad(_elev_filled, 1, mode="edge")
 	gx, gy = np.gradient(_padded, px_res_y * float(stride), px_res_x * float(stride))
 	gx = gx[1:-1, 1:-1]
 	gy = gy[1:-1, 1:-1]
 	slope = np.degrees(np.arctan(np.sqrt(np.square(gx) + np.square(gy))))
 
-	try:
-		with rasterio.open(str(ILLUMINATION_PATH)) as illum_src:
-			illum_window = from_bounds(
-				float(transform.c + c0 * float(transform.a)),
-				float(transform.f + r0 * float(transform.e) + win_h * float(transform.e)),
-				float(transform.c + c1 * float(transform.a)),
-				float(transform.f + r0 * float(transform.e)),
-				transform=illum_src.transform,
-			)
-			illum_window = illum_window.round_offsets().round_lengths()
-			if illum_window.width > 0 and illum_window.height > 0:
-				illum = illum_src.read(1, window=illum_window, boundless=True, fill_value=float("nan")).astype(np.float32)
-				if illum.shape != elev.shape:
-					from scipy.ndimage import zoom
-					illum = zoom(illum, (elev.shape[0] / illum.shape[0], elev.shape[1] / illum.shape[1]), order=0)
-			else:
-				illum = np.full_like(elev, 0.5)
-	except Exception:
-		illum = np.full_like(elev, 0.5)
+	# Load illumination
+	illum = site_data.get("illumination")
+	if illum is not None and site_data.get("illumination_meta"):
+		illum_meta = site_data["illumination_meta"]
+		illum_tf = illum_meta["transform"]
+		# Find corresponding window in illumination raster
+		# Map geographic coords of the elevation window to illumination pixel coords
+		x0 = transform.c + c0 * transform.a
+		y1 = transform.f + r0 * transform.e
+		x1_val = transform.c + c1 * transform.a
+		y0 = transform.f + r1 * transform.e
+		from rasterio.windows import from_bounds
+		from scipy.ndimage import zoom
+		illum_window = from_bounds(x0, y0, x1_val, y1, transform=illum_tf)
+		illum_window = illum_window.round_offsets().round_lengths()
+		if illum_window.width > 0 and illum_window.height > 0:
+			r_s = int(illum_window.row_off)
+			r_e = int(r_s + illum_window.height)
+			c_s = int(illum_window.col_off)
+			c_e = int(c_s + illum_window.width)
+			illum_crop = illum[r_s:r_e, c_s:c_e].astype(np.float32)
+			if illum_crop.shape != elev_win.shape:
+				illum_crop = zoom(illum_crop, (elev_win.shape[0] / illum_crop.shape[0], elev_win.shape[1] / illum_crop.shape[1]), order=0)
+		else:
+			illum_crop = np.full_like(elev_win, 0.5)
+	else:
+		illum_crop = np.full_like(elev_win, 0.5)
 
-	try:
-		with rasterio.open(str(METEOR_PATH)) as meteor_src:
-			meteor_window = from_bounds(
-				float(transform.c + c0 * float(transform.a)),
-				float(transform.f + r0 * float(transform.e) + win_h * float(transform.e)),
-				float(transform.c + c1 * float(transform.a)),
-				float(transform.f + r0 * float(transform.e)),
-				transform=meteor_src.transform,
-			)
-			meteor_window = meteor_window.round_offsets().round_lengths()
-			if meteor_window.width > 0 and meteor_window.height > 0:
-				meteor = meteor_src.read(1, window=meteor_window, boundless=True, fill_value=float("nan")).astype(np.float32)
-				if meteor.shape != elev.shape:
-					from scipy.ndimage import zoom
-					meteor = zoom(meteor, (elev.shape[0] / meteor.shape[0], elev.shape[1] / meteor.shape[1]), order=0)
-			else:
-				meteor = np.full_like(elev, 0.0)
-	except Exception:
-		meteor = np.full_like(elev, 0.0)
+	# Load meteor
+	meteor_arr = site_data.get("meteor")
+	if meteor_arr is not None and site_data.get("meteor_meta"):
+		meteor_meta = site_data["meteor_meta"]
+		meteor_tf = meteor_meta["transform"]
+		from rasterio.windows import from_bounds
+		from scipy.ndimage import zoom
+		meteor_window = from_bounds(x0, y0, x1_val, y1, transform=meteor_tf)
+		meteor_window = meteor_window.round_offsets().round_lengths()
+		if meteor_window.width > 0 and meteor_window.height > 0:
+			r_s = int(meteor_window.row_off)
+			r_e = int(r_s + meteor_window.height)
+			c_s = int(meteor_window.col_off)
+			c_e = int(c_s + meteor_window.width)
+			meteor_crop = meteor_arr[r_s:r_e, c_s:c_e].astype(np.float32)
+			if meteor_crop.shape != elev_win.shape:
+				meteor_crop = zoom(meteor_crop, (elev_win.shape[0] / meteor_crop.shape[0], elev_win.shape[1] / meteor_crop.shape[1]), order=0)
+		else:
+			meteor_crop = np.full_like(elev_win, 0.0)
+	else:
+		meteor_crop = np.full_like(elev_win, 0.0)
 
-	meteor_norm = np.full_like(meteor, 0.0, dtype=np.float32)
-	finite_meteor = meteor[np.isfinite(meteor)]
+	# Normalizations
+	meteor_norm = np.full_like(meteor_crop, 0.0, dtype=np.float32)
+	finite_meteor = meteor_crop[np.isfinite(meteor_crop)]
 	if finite_meteor.size > 0:
 		lo = float(np.min(finite_meteor))
 		hi = float(np.max(finite_meteor))
 		if hi > lo:
-			meteor_norm = ((meteor - lo) / (hi - lo)).astype(np.float32)
+			meteor_norm = ((meteor_crop - lo) / (hi - lo)).astype(np.float32)
 			meteor_norm = np.clip(meteor_norm, 0.0, 1.0)
 			meteor_norm[~np.isfinite(meteor_norm)] = 0.0
 
-	# All cells are traversable — coarse 5km/pixel data can't accurately block
-	# based on slope (artifacts from downsampling create phantom steep terrain).
-	# The slope cost still steers the path toward gentle terrain;
-	# real validation happens in the high-res simulation.
+	# All cells traversable at coarse resolution
 	traversable = np.ones(slope.shape, dtype=bool)
 
-	# Block cells from previously failed paths
 	if blocked_pixels:
 		for rr, cc in blocked_pixels:
 			rr_local = (rr - r0) // stride
@@ -404,17 +403,16 @@ def _compute_segment(
 			if 0 <= rr_local < traversable.shape[0] and 0 <= cc_local < traversable.shape[1]:
 				traversable[rr_local, cc_local] = False
 
-	# Use a generous cap so most cells get similar slope cost in norm
 	max_slope_val = max(60.0, float(max_slope_deg))
 	slope_norm = np.clip(slope.astype(np.float32) / max_slope_val, 0.0, 1.0)
 
-	illum_norm = np.full_like(illum, 0.5, dtype=np.float32)
-	finite_illum = illum[np.isfinite(illum)]
+	illum_norm = np.full_like(illum_crop, 0.5, dtype=np.float32)
+	finite_illum = illum_crop[np.isfinite(illum_crop)]
 	if finite_illum.size > 0:
 		lo = float(np.min(finite_illum))
 		hi = float(np.max(finite_illum))
 		if hi > lo:
-			illum_norm = ((illum - lo) / (hi - lo)).astype(np.float32)
+			illum_norm = ((illum_crop - lo) / (hi - lo)).astype(np.float32)
 			illum_norm = np.clip(illum_norm, 0.0, 1.0)
 			illum_norm[~np.isfinite(illum_norm)] = 0.5
 
@@ -425,13 +423,12 @@ def _compute_segment(
 		+ (float(max(0.0, meteor_weight)) * meteor_norm)
 	).astype(np.float32)
 	cell_cost = np.clip(cell_cost, 0.01, np.inf).astype(np.float32)
-	bad = ~np.isfinite(elev) | ~np.isfinite(slope)
+	bad = ~np.isfinite(elev_win) | ~np.isfinite(slope)
 	cell_cost[bad] = 1e6
 
 	start_local = (int((sr - r0) // stride), int((sc - c0) // stride))
 	goal_local = (int((gr - r0) // stride), int((gc - c0) // stride))
 
-	# Snap start/goal to nearest traversable cell if they land on steep terrain
 	if 0 <= start_local[0] < traversable.shape[0] and 0 <= start_local[1] < traversable.shape[1]:
 		if not traversable[start_local[0], start_local[1]]:
 			snapped = _snap_to_traversable(start_local, traversable)
@@ -461,7 +458,7 @@ def _compute_segment(
 		res_y=res_y,
 	)
 	if result is None or not result.get("path_rc"):
-		return None, "no path found — coarse data insufficient"
+		return None, "no path found"
 
 	a, b, c_ = float(transform.a), float(transform.b), float(transform.c)
 	d, e, f_ = float(transform.d), float(transform.e), float(transform.f)

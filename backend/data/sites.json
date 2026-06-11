@@ -1,0 +1,470 @@
+[
+  {
+    "name": "Amundsen 1",
+    "left": 175000.0,
+    "right": 195000.0,
+    "bottom": -8500.0,
+    "top": 11500.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "amundsen_1"
+  },
+  {
+    "name": "Amundsen rim",
+    "left": 154000.0,
+    "right": 174000.0,
+    "bottom": 51500.0,
+    "top": 71500.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "amundsen_rim"
+  },
+  {
+    "name": "Cabeus exterior wall 1",
+    "left": -98500.0,
+    "right": -78500.0,
+    "bottom": 19500.0,
+    "top": 39500.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "cabeus_exterior_wall_1"
+  },
+  {
+    "name": "Connecting ridge",
+    "left": -19000.0,
+    "right": -3000.0,
+    "bottom": -20000.0,
+    "top": -4000.0,
+    "width_m": 16000.0,
+    "height_m": 16000.0,
+    "tile_shape": [
+      3200,
+      3200
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "connecting_ridge"
+  },
+  {
+    "name": "Faustini rim A",
+    "left": 54000.0,
+    "right": 74000.0,
+    "bottom": -10000.0,
+    "top": 10000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "faustini_rim_a"
+  },
+  {
+    "name": "Haworth",
+    "left": -52900.0,
+    "right": -23100.0,
+    "bottom": 75600.0,
+    "top": 105400.0,
+    "width_m": 29800.0,
+    "height_m": 29800.0,
+    "tile_shape": [
+      5960,
+      5960
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "haworth"
+  },
+  {
+    "name": "Idel'son L crater 1",
+    "left": 122500.0,
+    "right": 142500.0,
+    "bottom": -109500.0,
+    "top": -89500.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "idel_son_l_crater_1"
+  },
+  {
+    "name": "Leibnitz beta plateau",
+    "left": 65000.0,
+    "right": 81000.0,
+    "bottom": 110000.0,
+    "top": 126000.0,
+    "width_m": 16000.0,
+    "height_m": 16000.0,
+    "tile_shape": [
+      3200,
+      3200
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "leibnitz_beta_plateau"
+  },
+  {
+    "name": "Leibnitz beta plateau, extended",
+    "left": 60000.0,
+    "right": 86000.0,
+    "bottom": 105000.0,
+    "top": 131000.0,
+    "width_m": 26000.0,
+    "height_m": 26000.0,
+    "tile_shape": [
+      5200,
+      5200
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "leibnitz_beta_plateau_extended"
+  },
+  {
+    "name": "Malapert crater 1",
+    "left": 13000.0,
+    "right": 33000.0,
+    "bottom": 146000.0,
+    "top": 166000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "malapert_crater_1"
+  },
+  {
+    "name": "Malapert massif",
+    "left": -11000.0,
+    "right": 10000.0,
+    "bottom": 111000.0,
+    "top": 132000.0,
+    "width_m": 21000.0,
+    "height_m": 21000.0,
+    "tile_shape": [
+      4200,
+      4200
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "malapert_massif"
+  },
+  {
+    "name": "Nobile rim 1",
+    "left": 74000.0,
+    "right": 94000.0,
+    "bottom": 100000.0,
+    "top": 120000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "nobile_rim_1"
+  },
+  {
+    "name": "Nobile rim 2",
+    "left": 147000.0,
+    "right": 167000.0,
+    "bottom": 85000.0,
+    "top": 105000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "nobile_rim_2"
+  },
+  {
+    "name": "Peak near Shackleton",
+    "left": 22000.0,
+    "right": 38000.0,
+    "bottom": -28000.0,
+    "top": -12000.0,
+    "width_m": 16000.0,
+    "height_m": 16000.0,
+    "tile_shape": [
+      3200,
+      3200
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "peak_near_shackleton"
+  },
+  {
+    "name": "Shackleton rim",
+    "left": -9000.0,
+    "right": 7000.0,
+    "bottom": -15000.0,
+    "top": 1000.0,
+    "width_m": 16000.0,
+    "height_m": 16000.0,
+    "tile_shape": [
+      3200,
+      3200
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "shackleton_rim"
+  },
+  {
+    "name": "Shackleton rim B",
+    "left": 2000.0,
+    "right": 22000.0,
+    "bottom": -2000.0,
+    "top": 18000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "shackleton_rim_b"
+  },
+  {
+    "name": "Shoemaker",
+    "left": 66000.0,
+    "right": 86000.0,
+    "bottom": 29000.0,
+    "top": 49000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "shoemaker"
+  },
+  {
+    "name": "Shoemaker rim A",
+    "left": 2000.0,
+    "right": 22000.0,
+    "bottom": 47000.0,
+    "top": 67000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "shoemaker_rim_a"
+  },
+  {
+    "name": "Shoemaker rim B",
+    "left": 4000.0,
+    "right": 24000.0,
+    "bottom": 37000.0,
+    "top": 57000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "shoemaker_rim_b"
+  },
+  {
+    "name": "Shoemaker rim C",
+    "left": 9000.0,
+    "right": 29000.0,
+    "bottom": 15000.0,
+    "top": 35000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "shoemaker_rim_c"
+  },
+  {
+    "name": "Shoemaker rim D",
+    "left": 30000.0,
+    "right": 50000.0,
+    "bottom": 1000.0,
+    "top": 21000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "shoemaker_rim_d"
+  },
+  {
+    "name": "Shoemaker rim E",
+    "left": 49000.0,
+    "right": 69000.0,
+    "bottom": 10000.0,
+    "top": 30000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "shoemaker_rim_e"
+  },
+  {
+    "name": "Shoemaker rim F",
+    "left": 60000.0,
+    "right": 80000.0,
+    "bottom": 30000.0,
+    "top": 50000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "shoemaker_rim_f"
+  },
+  {
+    "name": "de Gerlache rim",
+    "left": -45000.0,
+    "right": -29000.0,
+    "bottom": 7000.0,
+    "top": 23000.0,
+    "width_m": 16000.0,
+    "height_m": 16000.0,
+    "tile_shape": [
+      3200,
+      3200
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "de_gerlache_rim"
+  },
+  {
+    "name": "de Gerlache rim 2",
+    "left": -58500.0,
+    "right": -38500.0,
+    "bottom": 13000.0,
+    "top": 33000.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "de_gerlache_rim_2"
+  },
+  {
+    "name": "de Gerlache-Kocher massif",
+    "left": -123400.0,
+    "right": -103400.0,
+    "bottom": -66100.0,
+    "top": -46100.0,
+    "width_m": 20000.0,
+    "height_m": 20000.0,
+    "tile_shape": [
+      4000,
+      4000
+    ],
+    "tile_res": [
+      5.0,
+      5.0
+    ],
+    "normalized_name": "de_gerlache_kocher_massif"
+  }
+]
