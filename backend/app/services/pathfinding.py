@@ -13,6 +13,38 @@ from .rover_settings import RoverSettings
 from .simulation import run_simulation
 from .site_rasters import _load_site_bounds, load_site_data
 
+
+class _Window:
+	"""Minimal window class replacing rasterio.windows.Window."""
+	__slots__ = ("col_off", "row_off", "width", "height")
+
+	def __init__(self, col_off: float, row_off: float, width: float, height: float):
+		self.col_off = col_off
+		self.row_off = row_off
+		self.width = width
+		self.height = height
+
+	def round_offsets(self) -> "_Window":
+		return _Window(round(self.col_off), round(self.row_off), self.width, self.height)
+
+	def round_lengths(self) -> "_Window":
+		return _Window(self.col_off, self.row_off, round(self.width), round(self.height))
+
+
+def _window_from_bounds(left: float, bottom: float, right: float, top: float, transform) -> _Window:
+	"""Compute pixel window from geographic bounds, like rasterio.windows.from_bounds."""
+	inv = ~transform
+	col_ul, row_ul = inv * (left, top)
+	col_ur, row_ur = inv * (right, top)
+	col_ll, row_ll = inv * (left, bottom)
+	col_lr, row_lr = inv * (right, bottom)
+	col_off = min(col_ul, col_ur, col_ll, col_lr)
+	row_off = min(row_ul, row_ur, row_ll, row_lr)
+	col_end = max(col_ul, col_ur, col_ll, col_lr)
+	row_end = max(row_ul, row_ur, row_ll, row_lr)
+	return _Window(col_off, row_off, col_end - col_off, row_end - row_off)
+
+
 HERE = Path(__file__).resolve().parent.parent.parent
 _SNAP_RADIUS = 200
 _MIN_TRAV_NEIGHBORS = 1
@@ -343,9 +375,8 @@ def _compute_segment(
 		y1 = transform.f + r0 * transform.e
 		x1_val = transform.c + c1 * transform.a
 		y0 = transform.f + r1 * transform.e
-		from rasterio.windows import from_bounds
 		from scipy.ndimage import zoom
-		illum_window = from_bounds(x0, y0, x1_val, y1, transform=illum_tf)
+		illum_window = _window_from_bounds(x0, y0, x1_val, y1, transform=illum_tf)
 		illum_window = illum_window.round_offsets().round_lengths()
 		if illum_window.width > 0 and illum_window.height > 0:
 			r_s = int(illum_window.row_off)
@@ -365,9 +396,8 @@ def _compute_segment(
 	if meteor_arr is not None and site_data.get("meteor_meta"):
 		meteor_meta = site_data["meteor_meta"]
 		meteor_tf = meteor_meta["transform"]
-		from rasterio.windows import from_bounds
 		from scipy.ndimage import zoom
-		meteor_window = from_bounds(x0, y0, x1_val, y1, transform=meteor_tf)
+		meteor_window = _window_from_bounds(x0, y0, x1_val, y1, transform=meteor_tf)
 		meteor_window = meteor_window.round_offsets().round_lengths()
 		if meteor_window.width > 0 and meteor_window.height > 0:
 			r_s = int(meteor_window.row_off)

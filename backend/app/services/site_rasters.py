@@ -9,9 +9,9 @@ import re
 from pathlib import Path
 
 import numpy as np
+from affine import Affine
 from PIL import Image
 from pyproj import Transformer
-from rasterio import Affine
 
 HERE = Path(__file__).resolve().parent.parent.parent
 SITES_DATA_DIR = HERE / "data" / "sites"
