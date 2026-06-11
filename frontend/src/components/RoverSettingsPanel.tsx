@@ -4,6 +4,7 @@ import type { RoverSettings } from "../types";
 interface Props {
 	settings: RoverSettings;
 	onChange: (settings: RoverSettings) => void;
+	readOnly?: boolean;
 }
 
 const PRESETS: Record<string, RoverSettings> = {
@@ -11,21 +12,23 @@ const PRESETS: Record<string, RoverSettings> = {
 	"Apollo LRV": { mass_kg: 210, power_hp: 1.0, wheel_friction_coeff: 0.6, rolling_resistance_coeff: 0.021 },
 };
 
-export default function RoverSettingsPanel({ settings, onChange }: Props) {
+export default function RoverSettingsPanel({ settings, onChange, readOnly }: Props) {
 	const handleChange = useCallback(
 			(field: keyof RoverSettings) => (e: React.ChangeEvent<HTMLInputElement>) => {
+				if (readOnly) return;
 				const val = parseFloat(e.target.value);
 				if (!isNaN(val) && val > 0) {
 					onChange({ ...settings, [field]: val });
 				}
 			},
-			[settings, onChange],
+			[settings, onChange, readOnly],
 		);
 
 	const handlePreset = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+		if (readOnly) return;
 		const preset = PRESETS[e.target.value];
 		if (preset) onChange(preset);
-	}, [onChange]);
+	}, [onChange, readOnly]);
 
 	const currentPreset = Object.entries(PRESETS).find(
 		([_, p]) => p.mass_kg === settings.mass_kg && p.power_hp === settings.power_hp
@@ -48,42 +51,38 @@ export default function RoverSettingsPanel({ settings, onChange }: Props) {
 
 			<div className="field-row">
 				<label className="field-label">Rover mass (kg):</label>
-				<input
-					className="field-input"
-					type="text"
-					value={settings.mass_kg}
-					onChange={handleChange("mass_kg")}
-				/>
+				{readOnly ? (
+					<span className="field-value-text">{settings.mass_kg}</span>
+				) : (
+					<input className="field-input" type="text" value={settings.mass_kg} onChange={handleChange("mass_kg")} />
+				)}
 			</div>
 
 			<div className="field-row">
 				<label className="field-label">Rover power (hp):</label>
-				<input
-					className="field-input"
-					type="text"
-					value={settings.power_hp}
-					onChange={handleChange("power_hp")}
-				/>
+				{readOnly ? (
+					<span className="field-value-text">{settings.power_hp}</span>
+				) : (
+					<input className="field-input" type="text" value={settings.power_hp} onChange={handleChange("power_hp")} />
+				)}
 			</div>
 
 			<div className="field-row">
 				<label className="field-label">Wheel friction coeff (μ):</label>
-				<input
-					className="field-input"
-					type="text"
-					value={settings.wheel_friction_coeff}
-					onChange={handleChange("wheel_friction_coeff")}
-				/>
+				{readOnly ? (
+					<span className="field-value-text">{settings.wheel_friction_coeff}</span>
+				) : (
+					<input className="field-input" type="text" value={settings.wheel_friction_coeff} onChange={handleChange("wheel_friction_coeff")} />
+				)}
 			</div>
 
 			<div className="field-row">
 				<label className="field-label">Rolling resistance (Crr):</label>
-				<input
-					className="field-input"
-					type="text"
-					value={settings.rolling_resistance_coeff}
-					onChange={handleChange("rolling_resistance_coeff")}
-				/>
+				{readOnly ? (
+					<span className="field-value-text">{settings.rolling_resistance_coeff}</span>
+				) : (
+					<input className="field-input" type="text" value={settings.rolling_resistance_coeff} onChange={handleChange("rolling_resistance_coeff")} />
+				)}
 			</div>
 
 

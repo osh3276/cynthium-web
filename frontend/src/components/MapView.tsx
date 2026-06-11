@@ -8,9 +8,11 @@ interface Props {
 	waypoints: Waypoint[];
 	autodesignResult: AutodesignResult | null;
 	onAddWaypoint: (wp: Waypoint) => void;
+	gameStartPoint?: Waypoint | null;
+	gameEndPoint?: Waypoint | null;
 }
 
-export default function MapView({ mapData, status, waypoints, autodesignResult, onAddWaypoint }: Props) {
+export default function MapView({ mapData, status, waypoints, autodesignResult, onAddWaypoint, gameStartPoint, gameEndPoint }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const imgRef = useRef<HTMLImageElement | null>(null);
@@ -209,6 +211,28 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 								pointerEvents: "none",
 							}}
 						>
+							{gameStartPoint && (() => {
+								const b = mapData!.bounds;
+								const ix = ((gameStartPoint.x - b.left) / (b.right - b.left)) * imgNatural.w;
+								const iy = imgNatural.h - ((gameStartPoint.y - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
+								return (
+									<g>
+										<rect x={ix - 8} y={iy - 8} width={16} height={16} fill="#4fc3f7" rx={2} />
+										<text x={ix} y={iy + 3} textAnchor="middle" fill="white" fontSize={9} fontWeight={700}>S</text>
+									</g>
+								);
+							})()}
+							{gameEndPoint && (() => {
+								const b = mapData!.bounds;
+								const ix = ((gameEndPoint.x - b.left) / (b.right - b.left)) * imgNatural.w;
+								const iy = imgNatural.h - ((gameEndPoint.y - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
+								return (
+									<g>
+										<rect x={ix - 8} y={iy - 8} width={16} height={16} fill="#e53935" rx={2} />
+										<text x={ix} y={iy + 3} textAnchor="middle" fill="white" fontSize={9} fontWeight={700}>E</text>
+									</g>
+								);
+							})()}
 							{waypoints.map((wp, i) => {
 								const b = mapData!.bounds;
 								const ix = ((wp.x - b.left) / (b.right - b.left)) * imgNatural.w;

@@ -20,11 +20,14 @@ app.add_middleware(
 
 class AutodesignRequest(BaseModel):
 	waypoints_xy: list[list[float]]
-	slope_weight: float = 1.0
-	sun_weight: float = 0.5
-	meteor_weight: float = 0.0
+	slope_weight: float = 0.3
+	sun_weight: float = 0.3
+	meteor_weight: float = 0.05
 	path_mode: str = "segment"
+	rover_mass_kg: float = 150.0
+	rover_power_hp: float = 0.2
 	rover_friction_coeff: float = 0.6
+	rover_crr: float = 0.1
 
 
 class SimulateRequest(BaseModel):
@@ -71,6 +74,7 @@ async def site_map(
 
 @app.post("/api/sites/{site_name}/autodesign")
 async def site_autodesign(site_name: str, req: AutodesignRequest):
+	print(f"[API] Autodesign request: site={site_name} wps={len(req.waypoints_xy)} mode={req.path_mode} mu={req.rover_friction_coeff}")
 	result = compute_autodesign(
 		site_name,
 		req.waypoints_xy,
@@ -78,10 +82,15 @@ async def site_autodesign(site_name: str, req: AutodesignRequest):
 		sun_weight=req.sun_weight,
 		meteor_weight=req.meteor_weight,
 		path_mode=req.path_mode,
-		rover_mu=req.rover_friction_coeff,
+		rover_mass_kg=req.rover_mass_kg,
+		rover_power_hp=req.rover_power_hp,
+		rover_friction_coeff=req.rover_friction_coeff,
+		rover_crr=req.rover_crr,
 	)
 	if "error" in result:
+		print(f"[API] Autodesign error: {result['error']}")
 		raise HTTPException(status_code=400, detail=result["error"])
+	print(f"[API] Autodesign success: pts={len(result['path_xy'])}")
 	return result
 
 
@@ -89,6 +98,7 @@ async def site_autodesign(site_name: str, req: AutodesignRequest):
 async def site_simulate(site_name: str, req: SimulateRequest):
 	if len(req.path_xy) < 2:
 		raise HTTPException(status_code=400, detail="Need at least 2 path points")
+	print(f"[API] Simulate request: site={site_name} pts={len(req.path_xy)}")
 	try:
 		rover = RoverSettings(
 			mass_kg=req.rover_mass_kg,

@@ -10,17 +10,116 @@ import numpy as np
 import rasterio
 from rasterio.windows import from_bounds
 
+from .rover_settings import RoverSettings
+from .simulation import run_simulation
 from .site_rasters import (
 	COARSE_ELEVATION_PATH,
 	ILLUMINATION_PATH,
 	METEOR_PATH,
 	_load_site_bounds,
 )
-from .theta_star import theta_star
+
+
+def _dijkstra(
+	*,
+	start_rc: tuple[int, int],
+	goal_rc: tuple[int, int],
+	traversable: np.ndarray,
+	cell_cost: np.ndarray,
+	res_x: float,
+	res_y: float,
+) -> dict | None:
+	"""A* with 16-directional movement and admissible straight-line heuristic.
+	Heap-based — fast. Checks intermediate cells for distance-2 jumps.
+	"""
+	import heapq
+
+	H, W = traversable.shape
+	sr, sc = start_rc
+	gr, gc = goal_rc
+	if not (0 <= sr < H and 0 <= sc < W and 0 <= gr < H and 0 <= gc < W):
+		return None
+	if not bool(traversable[sr, sc]) or not bool(traversable[gr, gc]):
+		return None
+
+	INF = float("inf")
+	g_cost = np.full((H, W), INF, dtype=np.float64)
+	parent_r = np.full((H, W), -1, dtype=np.int32)
+	parent_c = np.full((H, W), -1, dtype=np.int32)
+
+	g_cost[sr, sc] = 0.0
+	parent_r[sr, sc] = sr
+	parent_c[sr, sc] = sc
+
+	def heuristic(r, c):
+		return math.hypot(float(gc - c) * res_x, float(gr - r) * res_y)
+
+	# 16 directions: 8 primary + 8 knight moves
+	dirs = [
+		(-1,0), (1,0), (0,-1), (0,1),
+		(-1,-1), (-1,1), (1,-1), (1,1),
+		(-1,-2), (1,-2), (-2,-1), (2,-1),
+		(-2,1), (2,1), (-1,2), (1,2),
+	]
+
+	heap = [(heuristic(sr, sc), 0.0, sr, sc)]
+	expanded = 0
+
+	while heap:
+		_, g_val, r, c = heapq.heappop(heap)
+		if g_val > g_cost[r, c]:
+			continue
+		if r == gr and c == gc:
+			break
+		expanded += 1
+
+		for dr, dc in dirs:
+			nr, nc = r + dr, c + dc
+			if nr < 0 or nc < 0 or nr >= H or nc >= W:
+				continue
+			if not bool(traversable[nr, nc]):
+				continue
+			# For knight moves (2,1 or 1,2), check traversable of intermediate cell
+			if max(abs(dr), abs(dc)) == 2:
+				mr = r + dr // 2 if abs(dr) == 2 else r
+				mc = c + dc // 2 if abs(dc) == 2 else c
+				if mr < 0 or mc < 0 or mr >= H or mc >= W:
+					continue
+				if not bool(traversable[mr, mc]):
+					continue
+
+			step = math.hypot(float(dc) * res_x, float(dr) * res_y)
+			avg_cost = 0.5 * (float(cell_cost[r, c]) + float(cell_cost[nr, nc]))
+			cand = g_val + step * avg_cost
+
+			if cand < g_cost[nr, nc]:
+				g_cost[nr, nc] = cand
+				parent_r[nr, nc] = r
+				parent_c[nr, nc] = c
+				f = cand + heuristic(nr, nc)
+				heapq.heappush(heap, (f, cand, nr, nc))
+
+	if g_cost[gr, gc] == INF:
+		return None
+
+	path: list[tuple[int, int]] = []
+	r, c = gr, gc
+	for _ in range(H * W):
+		path.append((r, c))
+		pr, pc = int(parent_r[r, c]), int(parent_c[r, c])
+		if pr == r and pc == c:
+			break
+		if pr < 0 or pc < 0:
+			break
+		r, c = pr, pc
+	else:
+		return None
+	path.reverse()
+	return {"path_rc": path, "total_cost": float(g_cost[gr, gc]), "expanded": expanded}
 
 HERE = Path(__file__).resolve().parent.parent
-_SNAP_RADIUS = 50
-_MIN_TRAV_NEIGHBORS = 3
+_SNAP_RADIUS = 200
+_MIN_TRAV_NEIGHBORS = 1
 
 
 def _snap_to_traversable(
@@ -69,23 +168,22 @@ def compute_autodesign(
 	site_name: str,
 	waypoints_xy: list[list[float]],
 	*,
-	slope_weight: float = 1.0,
-	sun_weight: float = 0.5,
-	meteor_weight: float = 0.0,
+	slope_weight: float = 0.3,
+	sun_weight: float = 0.3,
+	meteor_weight: float = 0.05,
 	pad_cells: int = 200,
 	max_expanded: int = 500000,
 	path_mode: str = "segment",
-	rover_mu: float = 0.6,
+	rover_mass_kg: float = 150.0,
+	rover_power_hp: float = 0.2,
+	rover_friction_coeff: float = 0.6,
+	rover_crr: float = 0.1,
 ) -> dict:
-	"""Compute the optimal path for the current rover using Theta*.
-
-	Derives max climbable slope from rover's wheel friction (mu),
-	so the path is tailored to what this rover can handle.
-	Returns a dict with "path_xy" on success, or "error" on failure.
+	"""Compute a path and validate it via simulation with the rover params.
+	If the path fails the traversal, reroute with failed cells blocked.
 	"""
 	t_start = time.perf_counter()
-
-	# Rover's max climbable slope governs the cost normalization
+	rover_mu = rover_friction_coeff
 	max_climbable = max(1.0, math.degrees(math.atan(rover_mu)))
 
 	bounds_dict = _load_site_bounds()
@@ -101,50 +199,77 @@ def compute_autodesign(
 			return {"error": f"Invalid waypoint format: {wp}"}
 		user_wps.append((float(wp[0]), float(wp[1])))
 
-	all_xy: list[tuple[float, float]] = []
-	seg_kw = dict(
-		min_slope_deg=0.0,
-		max_slope_deg=max_climbable,
-		slope_weight=slope_weight,
-		sun_weight=sun_weight,
-		meteor_weight=meteor_weight,
-		pad_cells=pad_cells,
-		max_expanded=max_expanded,
-	)
+	blocked_pixels: set[tuple[int, int]] = set()
+	site_path_xy: list[list[float]] = []
 
-	if path_mode == "direct":
-		seg, err = _compute_segment(start_xy=user_wps[0], goal_xy=user_wps[-1], **seg_kw)
-		if err:
-			return {"error": err}
-		if not seg or len(seg) < 2:
-			return {"error": "Path too short"}
-		all_xy = seg
-	else:
-		for i in range(len(user_wps) - 1):
-			seg, err = _compute_segment(start_xy=user_wps[i], goal_xy=user_wps[i + 1], **seg_kw)
+	for attempt in range(10):
+		all_xy: list[tuple[float, float]] = []
+		seg_kw = dict(
+			min_slope_deg=0.0,
+			max_slope_deg=max_climbable,
+			slope_weight=slope_weight,
+			sun_weight=sun_weight,
+			meteor_weight=meteor_weight,
+			pad_cells=pad_cells,
+			max_expanded=max_expanded,
+			blocked_pixels=blocked_pixels if blocked_pixels else None,
+		)
+
+		if path_mode == "direct":
+			seg, err = _compute_segment(start_xy=user_wps[0], goal_xy=user_wps[-1], **seg_kw)
 			if err:
-				return {"error": f"Segment {i+1}: {err}"}
+				return {"error": err}
 			if not seg or len(seg) < 2:
-				return {"error": f"Segment {i+1}: path too short"}
+				return {"error": "Path too short"}
+			all_xy = seg
+		else:
+			for i in range(len(user_wps) - 1):
+				seg, err = _compute_segment(start_xy=user_wps[i], goal_xy=user_wps[i + 1], **seg_kw)
+				if err:
+					return {"error": f"Segment {i+1}: {err}"}
+				if not seg or len(seg) < 2:
+					return {"error": f"Segment {i+1}: path too short"}
+				if i == 0:
+					all_xy.extend(seg)
+				else:
+					all_xy.extend(seg[1:])
 
-			if i == 0:
-				all_xy.extend(seg)
-			else:
-				all_xy.extend(seg[1:])
+		if len(all_xy) < 2:
+			return {"error": "Combined path too short"}
 
-	if len(all_xy) < 2:
-		return {"error": "Combined path too short"}
+		site_path_xy = [[float(x), float(y)] for x, y in all_xy]
 
-	site_path_xy = [[float(x), float(y)] for x, y in all_xy]
+		# Validate path with simulation using actual rover params and high-res data
+		rover = RoverSettings(
+			mass_kg=rover_mass_kg,
+			power_hp=rover_power_hp,
+			wheel_friction_coeff=rover_friction_coeff,
+			rolling_resistance_coeff=rover_crr,
+		)
+		try:
+			result = run_simulation(site_name, site_path_xy, rover)
+			feasible = result.get("traverse_feasible", 0) >= 0.5
+		except Exception:
+			feasible = False
 
+		if feasible:
+			elapsed = time.perf_counter() - t_start
+			print(f"[TIMER] Autodesign {elapsed:.1f}s attempt={attempt+1} | site={site_name} wps={len(waypoints_xy)} mode={path_mode} μ={rover_mu} → feasible")
+			return {"path_xy": site_path_xy, "total_cost": 0.0, "expanded": 0}
+
+		# Block the failed path and retry
+		with rasterio.open(str(COARSE_ELEVATION_PATH)) as src:
+			inv = ~src.transform
+			for x, y in all_xy:
+				c, r = inv * (float(x), float(y))
+				blocked_pixels.add((int(round(r)), int(round(c))))
+
+		print(f"[TIMER] Autodesign attempt {attempt+1} infeasible, retrying with {len(blocked_pixels)} cells blocked")
+
+	# All 10 attempts failed
 	elapsed = time.perf_counter() - t_start
-	print(f"[TIMER] Autodesign {elapsed:.1f}s | site={site_name} wps={len(waypoints_xy)} mode={path_mode} μ={rover_mu} max_climb={max_climbable:.1f}°")
-
-	return {
-		"path_xy": site_path_xy,
-		"total_cost": 0.0,
-		"expanded": 0,
-	}
+	print(f"[TIMER] Autodesign {elapsed:.1f}s | gave up after 10 attempts")
+	return {"error": "No traversable path found after 10 attempts — the rover cannot handle this terrain with the current settings"}
 
 
 def _compute_segment(
@@ -158,6 +283,7 @@ def _compute_segment(
 	meteor_weight: float = 0.0,
 	pad_cells: int,
 	max_expanded: int,
+	blocked_pixels: set | None = None,
 ) -> tuple[list[tuple[float, float]] | None, str | None]:
 	"""Compute a single Theta* segment. Returns (path, error_message)."""
 	with rasterio.open(str(COARSE_ELEVATION_PATH)) as src:
@@ -191,7 +317,7 @@ def _compute_segment(
 
 		win_h = int(r1 - r0)
 		win_w = int(c1 - c0)
-		max_nodes = 250000
+		max_nodes = 500000
 		area = win_h * win_w
 		stride = 1
 		if area > max_nodes:
@@ -264,10 +390,22 @@ def _compute_segment(
 			meteor_norm = np.clip(meteor_norm, 0.0, 1.0)
 			meteor_norm[~np.isfinite(meteor_norm)] = 0.0
 
-	traversable = np.isfinite(elev)
-	traversable &= np.isfinite(slope)
+	# All cells are traversable — coarse 5km/pixel data can't accurately block
+	# based on slope (artifacts from downsampling create phantom steep terrain).
+	# The slope cost still steers the path toward gentle terrain;
+	# real validation happens in the high-res simulation.
+	traversable = np.ones(slope.shape, dtype=bool)
 
-	max_slope_val = float(max_slope_deg) if max_slope_deg > 0 else 1.0
+	# Block cells from previously failed paths
+	if blocked_pixels:
+		for rr, cc in blocked_pixels:
+			rr_local = (rr - r0) // stride
+			cc_local = (cc - c0) // stride
+			if 0 <= rr_local < traversable.shape[0] and 0 <= cc_local < traversable.shape[1]:
+				traversable[rr_local, cc_local] = False
+
+	# Use a generous cap so most cells get similar slope cost in norm
+	max_slope_val = max(60.0, float(max_slope_deg))
 	slope_norm = np.clip(slope.astype(np.float32) / max_slope_val, 0.0, 1.0)
 
 	illum_norm = np.full_like(illum, 0.5, dtype=np.float32)
@@ -287,6 +425,8 @@ def _compute_segment(
 		+ (float(max(0.0, meteor_weight)) * meteor_norm)
 	).astype(np.float32)
 	cell_cost = np.clip(cell_cost, 0.01, np.inf).astype(np.float32)
+	bad = ~np.isfinite(elev) | ~np.isfinite(slope)
+	cell_cost[bad] = 1e6
 
 	start_local = (int((sr - r0) // stride), int((sc - c0) // stride))
 	goal_local = (int((gr - r0) // stride), int((gc - c0) // stride))
@@ -312,19 +452,16 @@ def _compute_segment(
 	res_x = float(abs(transform.a)) * float(stride)
 	res_y = float(abs(transform.e)) * float(stride)
 
-	result = theta_star(
+	result = _dijkstra(
 		start_rc=start_local,
 		goal_rc=goal_local,
 		traversable=traversable,
 		cell_cost=cell_cost,
 		res_x=res_x,
 		res_y=res_y,
-		max_expanded=int(max_expanded),
 	)
-	if result is None:
-		return None, "no traversable path exists — try increasing the max slope or adjusting waypoints"
-	if not result["path_rc"]:
-		return None, "no traversable path exists between these waypoints with current slope constraints"
+	if result is None or not result.get("path_rc"):
+		return None, "no path found — coarse data insufficient"
 
 	a, b, c_ = float(transform.a), float(transform.b), float(transform.c)
 	d, e, f_ = float(transform.d), float(transform.e), float(transform.f)

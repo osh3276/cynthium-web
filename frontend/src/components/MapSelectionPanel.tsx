@@ -6,18 +6,19 @@ interface Props {
 	onLoadSite: (siteName: string, mapType: string, date: string) => void;
 	status: LoadStatus;
 	defaultDate: string;
+	readOnly?: boolean;
 }
 
-export default function MapSelectionPanel({ onLoadSite, status, defaultDate }: Props) {
+export default function MapSelectionPanel({ onLoadSite, status, defaultDate, readOnly }: Props) {
 	const presetNames = Object.keys(SITE_PRESETS).sort();
 	const [selectedSite, setSelectedSite] = useState("");
 	const [selectedMapType, setSelectedMapType] = useState("Elevation");
 	const [date, setDate] = useState(defaultDate);
 
 	const handleGenerate = useCallback(() => {
-		if (!selectedSite) return;
-		onLoadSite(selectedSite, selectedMapType, date);
-	}, [selectedSite, selectedMapType, date, onLoadSite]);
+			if (!selectedSite || readOnly) return;
+			onLoadSite(selectedSite, selectedMapType, date);
+		}, [selectedSite, selectedMapType, date, onLoadSite, readOnly]);
 
 	return (
 		<div className="panel">
@@ -58,12 +59,16 @@ export default function MapSelectionPanel({ onLoadSite, status, defaultDate }: P
 
 			<div className="field-row">
 				<label className="field-label">Date:</label>
-				<input
-					className="field-input"
-					type="date"
-					value={date}
-					onChange={(e) => setDate(e.target.value)}
-				/>
+				{readOnly ? (
+					<span className="field-value-text">{date}</span>
+				) : (
+					<input
+						className="field-input"
+						type="date"
+						value={date}
+						onChange={(e) => setDate(e.target.value)}
+					/>
+				)}
 			</div>
 
 			<button

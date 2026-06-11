@@ -563,6 +563,12 @@ body {
 	flex: none;
 }
 
+.field-value-text {
+	font-size: 12px;
+	color: var(--text-bright);
+	padding: 3px 0;
+}
+
 select.field-input {
 	cursor: pointer;
 	appearance: none;
@@ -657,6 +663,110 @@ select.field-input option {
 	color: #ff6b6b;
 	font-size: 12px;
 	border-top: 1px solid #6b2020;
+}
+
+/* ===== Game Dialogs ===== */
+.dialog-overlay {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.65);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 2000;
+}
+
+.dialog {
+	background: var(--bg-lighter);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	padding: 20px 24px;
+	min-width: 360px;
+	max-width: 480px;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.dialog-title {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--text-bright);
+	text-align: center;
+}
+
+.dialog-result {
+	font-size: 20px;
+	font-weight: 700;
+	text-align: center;
+	padding: 6px 0;
+}
+
+.dialog-result.user-win {
+	color: #81c784;
+}
+
+.dialog-result.auto-win {
+	color: #e53935;
+}
+
+.dialog-score-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.dialog-score-table th {
+	padding: 4px 8px;
+	font-size: 11px;
+	color: var(--text-bright);
+	font-weight: 600;
+	text-align: left;
+	border-bottom: 1px solid var(--border);
+}
+
+.dialog-score-table th:last-child,
+.dialog-score-table th:nth-last-child(2) {
+	text-align: right;
+}
+
+.dialog-score-table td {
+	padding: 4px 8px;
+	font-size: 12px;
+	border-bottom: 1px solid var(--border);
+}
+
+.dialog-label {
+	color: var(--text);
+}
+
+.dialog-val {
+	color: var(--text-dim);
+	text-align: right;
+	font-family: var(--font-mono);
+	font-size: 11px;
+}
+
+.dialog-button {
+	padding: 6px 16px;
+	background: var(--input-bg);
+	border: 1px solid var(--input-border);
+	border-radius: 3px;
+	color: var(--text);
+	font-size: 12px;
+	cursor: pointer;
+	text-align: center;
+	align-self: center;
+	margin-top: 4px;
+	transition: background 0.1s;
+}
+
+.dialog-button:hover {
+	background: var(--bg-hover);
+}
+
+.dialog-button:active {
+	background: var(--accent);
 }
 
 /* ===== Status Bar ===== */
