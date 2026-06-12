@@ -7,7 +7,7 @@ export default defineConfig({
 		port: 5173,
 		proxy: {
 			"/api": {
-				target: "https://cynthium-server.vercel.app"
+				target: "https://cynthium-server.vercel.app",
 				changeOrigin: true,
 			},
 		},
