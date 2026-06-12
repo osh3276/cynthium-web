@@ -1,5 +1,5 @@
 [tool.vercel]
-entrypoint = "app/main.py"
+entrypoint = "backend.app.main:app"
 
 [project]
 name = "cynthium-server"
