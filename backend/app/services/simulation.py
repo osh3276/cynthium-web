@@ -117,7 +117,8 @@ def simulate_rover_over_path(
 	theta[valid] = np.arctan2(dz[valid], horiz[valid])
 
 	inv_illum = None
-	if illumination_map is not None and illumination_transform is not None:
+	illum_map: np.ndarray | None = illumination_map
+	if illum_map is not None and illumination_transform is not None:
 		inv_illum = ~illumination_transform
 
 	v = float(v0_mps)
@@ -159,8 +160,8 @@ def simulate_rover_over_path(
 					col, row = inv_illum * (float(xy_mid[0]), float(xy_mid[1]))
 					ci = int(round(col))
 					ri = int(round(row))
-					if 0 <= ri < illumination_map.shape[0] and 0 <= ci < illumination_map.shape[1]:
-						illum = float(illumination_map[ri, ci])
+					if illum_map is not None and 0 <= ri < illum_map.shape[0] and 0 <= ci < illum_map.shape[1]:
+						illum = float(illum_map[ri, ci])
 						if np.isfinite(illum):
 							energy_j_per_m2 += illum * float(dt)
 				min_v = min(min_v, 0.0)
@@ -189,8 +190,8 @@ def simulate_rover_over_path(
 			col, row = inv_illum * (float(xy_mid[0]), float(xy_mid[1]))
 			ci = int(round(col))
 			ri = int(round(row))
-			if 0 <= ri < illumination_map.shape[0] and 0 <= ci < illumination_map.shape[1]:
-				illum = float(illumination_map[ri, ci])
+			if illum_map is not None and 0 <= ri < illum_map.shape[0] and 0 <= ci < illum_map.shape[1]:
+				illum = float(illum_map[ri, ci])
 				if np.isfinite(illum):
 					energy_j_per_m2 += illum * float(dt)
 

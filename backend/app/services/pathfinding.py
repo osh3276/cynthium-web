@@ -222,20 +222,22 @@ def compute_autodesign(
 
 	for attempt in range(10):
 		all_xy: list[tuple[float, float]] = []
-		seg_kw = dict(
-			site_name=site_name,
-			min_slope_deg=0.0,
-			max_slope_deg=max_climbable,
-			slope_weight=slope_weight,
-			sun_weight=sun_weight,
-			meteor_weight=meteor_weight,
-			pad_cells=pad_cells,
-			max_expanded=max_expanded,
-			blocked_pixels=blocked_pixels if blocked_pixels else None,
-		)
+		blocked: set[tuple[int, int]] | None = blocked_pixels if blocked_pixels else None
 
 		if path_mode == "direct":
-			seg, err = _compute_segment(start_xy=user_wps[0], goal_xy=user_wps[-1], **seg_kw)
+			seg, err = _compute_segment(
+				start_xy=user_wps[0],
+				goal_xy=user_wps[-1],
+				site_name=site_name,
+				min_slope_deg=0.0,
+				max_slope_deg=max_climbable,
+				slope_weight=slope_weight,
+				sun_weight=sun_weight,
+				meteor_weight=meteor_weight,
+				pad_cells=pad_cells,
+				max_expanded=max_expanded,
+				blocked_pixels=blocked,
+			)
 			if err:
 				return {"error": err}
 			if not seg or len(seg) < 2:
@@ -243,7 +245,19 @@ def compute_autodesign(
 			all_xy = seg
 		else:
 			for i in range(len(user_wps) - 1):
-				seg, err = _compute_segment(start_xy=user_wps[i], goal_xy=user_wps[i + 1], **seg_kw)
+				seg, err = _compute_segment(
+					start_xy=user_wps[i],
+					goal_xy=user_wps[i + 1],
+					site_name=site_name,
+					min_slope_deg=0.0,
+					max_slope_deg=max_climbable,
+					slope_weight=slope_weight,
+					sun_weight=sun_weight,
+					meteor_weight=meteor_weight,
+					pad_cells=pad_cells,
+					max_expanded=max_expanded,
+					blocked_pixels=blocked,
+				)
 				if err:
 					return {"error": f"Segment {i+1}: {err}"}
 				if not seg or len(seg) < 2:
@@ -273,7 +287,7 @@ def compute_autodesign(
 
 		if feasible:
 			elapsed = time.perf_counter() - t_start
-			print(f"[TIMER] Autodesign {elapsed:.1f}s attempt={attempt+1} | site={site_name} wps={len(waypoints_xy)} mode={path_mode} μ={rover_mu} → feasible")
+			print(f"[TIMER] Autodesign {elapsed:.1f}s attempt={attempt+1} | site={site_name} wps={len(waypoints_xy)} mode={path_mode} \u03bc={rover_mu} \u2192 feasible")
 			return {"path_xy": site_path_xy, "total_cost": 0.0, "expanded": 0}
 
 		# Block the failed path and retry using the site's elevation transform
@@ -289,7 +303,7 @@ def compute_autodesign(
 
 	elapsed = time.perf_counter() - t_start
 	print(f"[TIMER] Autodesign {elapsed:.1f}s | gave up after 10 attempts")
-	return {"error": "No traversable path found after 10 attempts — the rover cannot handle this terrain with the current settings"}
+	return {"error": "No traversable path found after 10 attempts \u2014 the rover cannot handle this terrain with the current settings"}
 
 
 def _compute_segment(
@@ -364,17 +378,18 @@ def _compute_segment(
 	gy = gy[1:-1, 1:-1]
 	slope = np.degrees(np.arctan(np.sqrt(np.square(gx) + np.square(gy))))
 
+	# Map geographic coords of the elevation window to pixel coords (used for both illum & meteor)
+	x0 = transform.c + c0 * transform.a
+	y1 = transform.f + r0 * transform.e
+	x1_val = transform.c + c1 * transform.a
+	y0 = transform.f + r1 * transform.e
+
 	# Load illumination
 	illum = site_data.get("illumination")
 	if illum is not None and site_data.get("illumination_meta"):
 		illum_meta = site_data["illumination_meta"]
 		illum_tf = illum_meta["transform"]
 		# Find corresponding window in illumination raster
-		# Map geographic coords of the elevation window to illumination pixel coords
-		x0 = transform.c + c0 * transform.a
-		y1 = transform.f + r0 * transform.e
-		x1_val = transform.c + c1 * transform.a
-		y0 = transform.f + r1 * transform.e
 		from scipy.ndimage import zoom
 		illum_window = _window_from_bounds(x0, y0, x1_val, y1, transform=illum_tf)
 		illum_window = illum_window.round_offsets().round_lengths()
@@ -413,8 +428,9 @@ def _compute_segment(
 		meteor_crop = np.full_like(elev_win, 0.0)
 
 	# Normalizations
+	meteor_crop = np.asarray(meteor_crop)
 	meteor_norm = np.full_like(meteor_crop, 0.0, dtype=np.float32)
-	finite_meteor = meteor_crop[np.isfinite(meteor_crop)]
+	finite_meteor = np.asarray(meteor_crop[np.isfinite(meteor_crop)])
 	if finite_meteor.size > 0:
 		lo = float(np.min(finite_meteor))
 		hi = float(np.max(finite_meteor))
@@ -424,20 +440,25 @@ def _compute_segment(
 			meteor_norm[~np.isfinite(meteor_norm)] = 0.0
 
 	# All cells traversable at coarse resolution
+	# elev_win is 2D (from raster slice), so its shape gives nrows/ncols
+	nrows = int(elev_win.shape[0])
+	ncols = int(elev_win.shape[1])
 	traversable = np.ones(slope.shape, dtype=bool)
 
 	if blocked_pixels:
 		for rr, cc in blocked_pixels:
 			rr_local = (rr - r0) // stride
 			cc_local = (cc - c0) // stride
-			if 0 <= rr_local < traversable.shape[0] and 0 <= cc_local < traversable.shape[1]:
+			if 0 <= rr_local < nrows and 0 <= cc_local < ncols:
 				traversable[rr_local, cc_local] = False
 
+	slope = np.asarray(slope)
 	max_slope_val = max(60.0, float(max_slope_deg))
 	slope_norm = np.clip(slope.astype(np.float32) / max_slope_val, 0.0, 1.0)
 
+	illum_crop = np.asarray(illum_crop)
 	illum_norm = np.full_like(illum_crop, 0.5, dtype=np.float32)
-	finite_illum = illum_crop[np.isfinite(illum_crop)]
+	finite_illum = np.asarray(illum_crop[np.isfinite(illum_crop)])
 	if finite_illum.size > 0:
 		lo = float(np.min(finite_illum))
 		hi = float(np.max(finite_illum))
@@ -452,6 +473,7 @@ def _compute_segment(
 		+ (float(max(0.0, sun_weight)) * (1.0 - illum_norm))
 		+ (float(max(0.0, meteor_weight)) * meteor_norm)
 	).astype(np.float32)
+	cell_cost = np.asarray(cell_cost)
 	cell_cost = np.clip(cell_cost, 0.01, np.inf).astype(np.float32)
 	bad = ~np.isfinite(elev_win) | ~np.isfinite(slope)
 	cell_cost[bad] = 1e6
@@ -459,7 +481,7 @@ def _compute_segment(
 	start_local = (int((sr - r0) // stride), int((sc - c0) // stride))
 	goal_local = (int((gr - r0) // stride), int((gc - c0) // stride))
 
-	if 0 <= start_local[0] < traversable.shape[0] and 0 <= start_local[1] < traversable.shape[1]:
+	if 0 <= start_local[0] < nrows and 0 <= start_local[1] < ncols:
 		if not traversable[start_local[0], start_local[1]]:
 			snapped = _snap_to_traversable(start_local, traversable)
 			if snapped is not None:
@@ -467,7 +489,7 @@ def _compute_segment(
 		traversable[start_local[0], start_local[1]] = True
 		if not np.isfinite(cell_cost[start_local[0], start_local[1]]):
 			cell_cost[start_local[0], start_local[1]] = 1.0
-	if 0 <= goal_local[0] < traversable.shape[0] and 0 <= goal_local[1] < traversable.shape[1]:
+	if 0 <= goal_local[0] < nrows and 0 <= goal_local[1] < ncols:
 		if not traversable[goal_local[0], goal_local[1]]:
 			snapped = _snap_to_traversable(goal_local, traversable)
 			if snapped is not None:

@@ -63,7 +63,9 @@ def _load_site_bounds() -> list[dict]:
 		return _site_bounds_cache
 
 	with open(str(SITES_JSON_PATH)) as f:
-		_site_bounds_cache = json.load(f)
+		loaded = json.load(f)
+		_site_bounds_cache = loaded if loaded is not None else []
+	assert _site_bounds_cache is not None
 	return _site_bounds_cache
 
 
@@ -273,6 +275,7 @@ def get_site_map(site_name: str, map_type: str = "Elevation") -> dict | None:
 		elif s_data is not None:
 			data = s_data
 		else:
+			assert w_data is not None
 			data = w_data
 		label = "Avg Temperature"
 		png = _data_to_png(data, colormap=True)
@@ -280,6 +283,7 @@ def get_site_map(site_name: str, map_type: str = "Elevation") -> dict | None:
 	else:
 		return None
 
+	assert data is not None, "data should be set before reaching this point"
 	mask = np.isfinite(data)
 	dmin = float(np.min(data[mask])) if np.any(mask) else 0
 	dmax = float(np.max(data[mask])) if np.any(mask) else 0
