@@ -6,29 +6,31 @@ import type { LoadStatus } from "../App";
 import type { Waypoint, AutodesignResult, AutodesignConfig, RoverSettings, GameState } from "../types";
 
 interface Props {
-	onLoadSite: (siteName: string, mapType: string, date: string) => void;
-	status: LoadStatus;
-	waypoints: Waypoint[];
-	onAddWaypoint: (wp: Waypoint) => void;
-	onRemoveWaypoint: (index: number) => void;
-	onAutodesign: (config: AutodesignConfig) => void;
-	autodesignRunning: boolean;
-	autodesignResult: AutodesignResult | null;
-	roverSettings: RoverSettings;
-	onRoverChange: (settings: RoverSettings) => void;
-	gameState?: GameState | null;
-	gameStartPoint?: Waypoint | null;
-	gameEndPoint?: Waypoint | null;
-	onFinishPath?: () => void;
-	simulating?: boolean;
-}
+			onLoadSite: (siteName: string, mapType: string, date: string) => void;
+			onChangeMapType?: (mapType: string, date: string) => void;
+			status: LoadStatus;
+			waypoints: Waypoint[];
+		onAddWaypoint: (wp: Waypoint) => void;
+		onRemoveWaypoint: (index: number) => void;
+		onAutodesign: (config: AutodesignConfig) => void;
+		autodesignRunning: boolean;
+		autodesignResult: AutodesignResult | null;
+		roverSettings: RoverSettings;
+		onRoverChange: (settings: RoverSettings) => void;
+		gameState?: GameState | null;
+		gameStartPoint?: Waypoint | null;
+		gameEndPoint?: Waypoint | null;
+		onFinishPath?: () => void;
+		onNextRound?: () => void;
+		simulating?: boolean;
+	}
 
 export default function Sidebar({
-	onLoadSite, status, waypoints, onAddWaypoint,
-	onRemoveWaypoint, onAutodesign, autodesignRunning, autodesignResult,
-	roverSettings, onRoverChange,
-	gameState, gameStartPoint, gameEndPoint, onFinishPath, simulating,
-}: Props) {
+		onLoadSite, onChangeMapType, onNextRound, status, waypoints, onAddWaypoint,
+		onRemoveWaypoint, onAutodesign, autodesignRunning, autodesignResult,
+		roverSettings, onRoverChange,
+		gameState, gameStartPoint, gameEndPoint, onFinishPath, simulating,
+	}: Props) {
 	const [slopeWeight, setSlopeWeight] = useState("0.3");
 	const [sunWeight, setSunWeight] = useState("0.3");
 	const [meteorWeight, setMeteorWeight] = useState("0.05");
@@ -51,7 +53,7 @@ export default function Sidebar({
 	return (
 		<aside className="sidebar">
 			<div className="sidebar-scroll">
-				<MapSelectionPanel onLoadSite={onLoadSite} status={status} defaultDate="2026-05-13" readOnly={!!gameState?.active} />
+				<MapSelectionPanel onLoadSite={onLoadSite} onChangeMapType={onChangeMapType} status={status} defaultDate="2026-05-13" readOnly={!!gameState?.active} />
 				<div className="sidebar-divider" />
 				<PlanningPanel
 					waypoints={waypoints}
@@ -80,14 +82,24 @@ export default function Sidebar({
 							<div className="field-row" style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 4 }}>
 								<span>Waypoints placed: {waypoints.length}</span>
 							</div>
-							<button
-								className="panel-button generate-button"
-								onClick={onFinishPath}
-								disabled={waypoints.length < 2 || simulating}
-								style={{ marginTop: 4 }}
-							>
-								{simulating ? "Scoring..." : "Finish Path"}
-							</button>
+							{gameState.rounds[gameState.currentRound]?.userStats ? (
+								<button
+									className="panel-button generate-button"
+									onClick={onNextRound}
+									style={{ marginTop: 4 }}
+								>
+									Next Round
+								</button>
+							) : (
+								<button
+									className="panel-button generate-button"
+									onClick={onFinishPath}
+									disabled={waypoints.length < 2 || simulating}
+									style={{ marginTop: 4 }}
+								>
+									{simulating ? "Scoring..." : "Finish Path"}
+								</button>
+							)}
 						</div>
 					</>
 				) : (

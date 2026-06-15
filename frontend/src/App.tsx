@@ -70,7 +70,12 @@ function App() {
 	const [gameStartPoint, setGameStartPoint] = useState<Waypoint | null>(null);
 	const [gameEndPoint, setGameEndPoint] = useState<Waypoint | null>(null);
 	const [showGameResult, setShowGameResult] = useState(false);
-	const [showGameFinish, setShowGameFinish] = useState(false);
+			const [showGameFinish, setShowGameFinish] = useState(false);
+			const [gameLoading, setGameLoading] = useState(false);
+
+			const handleCloseGameResult = useCallback(() => {
+				setShowGameResult(false);
+			}, []);
 
 	const loadSiteMap = useCallback(async (siteName: string, mapType: string, date: string) => {
 		const siteChanged = siteName !== loadedSiteRef.current;
@@ -97,9 +102,15 @@ function App() {
 	}, []);
 
 	const handleLoadSite = useCallback((siteName: string, mapType: string, date: string) => {
-		if (gameState?.active) return;
-		loadSiteMap(siteName, mapType, date);
-	}, [loadSiteMap, gameState]);
+				if (gameState?.active) return;
+				loadSiteMap(siteName, mapType, date);
+			}, [loadSiteMap, gameState]);
+
+			const handleChangeMapType = useCallback((mapType: string, date: string) => {
+				if (currentSite) {
+					loadSiteMap(currentSite, mapType, date);
+				}
+			}, [loadSiteMap, currentSite]);
 
 	const handleAddWaypoint = useCallback((wp: Waypoint) => {
 		setWaypoints((prev) => [...prev, wp]);
@@ -234,44 +245,49 @@ function App() {
 
 	// ---- Game handlers ----
 	const handleStartGame = useCallback(async () => {
-		const siteNames = Object.keys(SITE_PRESETS);
-		const picked = shufflePick(siteNames, Math.min(5, siteNames.length));
+			setGameLoading(true);
+			try {
+				const siteNames = Object.keys(SITE_PRESETS);
+				const picked = shufflePick(siteNames, Math.min(5, siteNames.length));
 
-		// Create rounds and pre-generate all start/end points
-		const roundPromises = picked.map(async (name) => {
-			const round: GameRound = {
-				siteName: name,
-				mapType: "Elevation",
-				startPoint: { x: 0, y: 0 },
-				endPoint: { x: 0, y: 0 },
-				userPath: [],
-				autoPath: null,
-				userStats: null,
-				autoStats: null,
-				userScore: 0,
-				autoScore: 0,
-			};
-			const pts = await generateRoundPoints(round);
-			if (pts) {
-				round.startPoint = pts.start;
-				round.endPoint = pts.end;
+				// Create rounds and pre-generate all start/end points
+				const roundPromises = picked.map(async (name) => {
+					const round: GameRound = {
+						siteName: name,
+						mapType: "Elevation",
+						startPoint: { x: 0, y: 0 },
+						endPoint: { x: 0, y: 0 },
+						userPath: [],
+						autoPath: null,
+						userStats: null,
+						autoStats: null,
+						userScore: 0,
+						autoScore: 0,
+					};
+					const pts = await generateRoundPoints(round);
+					if (pts) {
+						round.startPoint = pts.start;
+						round.endPoint = pts.end;
+					}
+					return round;
+				});
+				const rounds = await Promise.all(roundPromises);
+
+				setRoverSettings(LRV_ROVER);
+				setGameState({ active: true, rounds, currentRound: 0, finished: false });
+				setShowGameResult(false);
+				setShowGameFinish(false);
+				setWaypoints([]);
+				setAutodesignResult(null);
+				setManualStats(null);
+				setAutoStats(null);
+				setGameStartPoint(rounds[0].startPoint);
+				setGameEndPoint(rounds[0].endPoint);
+				await loadSiteMap(rounds[0].siteName, rounds[0].mapType, "2026-05-13");
+			} finally {
+				setGameLoading(false);
 			}
-			return round;
-		});
-		const rounds = await Promise.all(roundPromises);
-
-		setRoverSettings(LRV_ROVER);
-		setGameState({ active: true, rounds, currentRound: 0, finished: false });
-		setShowGameResult(false);
-		setShowGameFinish(false);
-		setWaypoints([]);
-		setAutodesignResult(null);
-		setManualStats(null);
-		setAutoStats(null);
-		setGameStartPoint(rounds[0].startPoint);
-		setGameEndPoint(rounds[0].endPoint);
-		await loadSiteMap(rounds[0].siteName, rounds[0].mapType, "2026-05-13");
-	}, [loadSiteMap, generateRoundPoints]);
+		}, [loadSiteMap, generateRoundPoints]);
 
 	const advanceRound = useCallback(async () => {
 		if (!gameState) return;
@@ -417,33 +433,37 @@ function App() {
 						/>
 					</div>
 					<div className="resize-handle" onMouseDown={handleResultsResize} />
-					<div className="results-area" style={{ height: resultsHeight }}>
-						<SimulationResultsPanel
-							manualStats={manualStats}
-							autoStats={autoStats}
-							onSimulate={handleSimulate}
-							simulating={simulating}
-						/>
-					</div>
+					{!gameState?.active && (
+						<div className="results-area" style={{ height: resultsHeight }}>
+							<SimulationResultsPanel
+								manualStats={manualStats}
+								autoStats={autoStats}
+								onSimulate={handleSimulate}
+								simulating={simulating}
+							/>
+						</div>
+					)}
 				</div>
 				<div className="sidebar-pane">
-					<Sidebar
-						onLoadSite={handleLoadSite}
-						status={status}
-						waypoints={waypoints}
-						onAddWaypoint={handleAddWaypoint}
-						onRemoveWaypoint={handleRemoveWaypoint}
-						onAutodesign={handleAutodesign}
-						autodesignRunning={autodesignRunning}
-						autodesignResult={autodesignResult}
-						roverSettings={roverSettings}
-						onRoverChange={handleRoverChange}
-						gameState={gameState}
-						gameStartPoint={gameStartPoint}
-						gameEndPoint={gameEndPoint}
-						onFinishPath={handleFinishPath}
-						simulating={simulating}
-					/>
+						<Sidebar
+							onLoadSite={handleLoadSite}
+							onChangeMapType={handleChangeMapType}
+							onNextRound={advanceRound}
+							status={status}
+							waypoints={waypoints}
+							onAddWaypoint={handleAddWaypoint}
+							onRemoveWaypoint={handleRemoveWaypoint}
+							onAutodesign={handleAutodesign}
+							autodesignRunning={autodesignRunning}
+							autodesignResult={autodesignResult}
+							roverSettings={roverSettings}
+							onRoverChange={handleRoverChange}
+							gameState={gameState}
+							gameStartPoint={gameStartPoint}
+							gameEndPoint={gameEndPoint}
+							onFinishPath={handleFinishPath}
+							simulating={simulating}
+						/>
 				</div>
 			</div>
 			{showGameResult && currentRound && gameState && (
@@ -458,15 +478,23 @@ function App() {
 					userGrade={(currentRound.userStats?.["traversal_grade"] as string) || "F"}
 					autoGrade={(currentRound.autoStats?.["traversal_grade"] as string) || "F"}
 					onNext={advanceRound}
+					onClose={handleCloseGameResult}
 					isLast={gameState.currentRound >= gameState.rounds.length - 1}
 				/>
 			)}
 			{showGameFinish && gameState && (
-				<GameFinishDialog
-					rounds={gameState.rounds}
-					onFinish={handleGameFinish}
-				/>
-			)}
+			<GameFinishDialog
+				rounds={gameState.rounds}
+				onFinish={handleGameFinish}
+			/>
+		)}
+			{gameLoading && (
+						<div className="dialog-overlay">
+							<div className="dialog" style={{ alignItems: "center" }}>
+								<div className="dialog-title">Loading game...</div>
+							</div>
+						</div>
+					)}
 		</div>
 	);
 }

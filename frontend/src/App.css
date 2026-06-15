@@ -748,18 +748,24 @@ select.field-input option {
 }
 
 .dialog-button {
-	padding: 6px 16px;
-	background: var(--input-bg);
-	border: 1px solid var(--input-border);
-	border-radius: 3px;
-	color: var(--text);
-	font-size: 12px;
-	cursor: pointer;
-	text-align: center;
-	align-self: center;
-	margin-top: 4px;
-	transition: background 0.1s;
-}
+		padding: 6px 16px;
+		background: var(--input-bg);
+		border: 1px solid var(--input-border);
+		border-radius: 3px;
+		color: var(--text);
+		font-size: 12px;
+		cursor: pointer;
+		text-align: center;
+		align-self: center;
+		margin-top: 4px;
+		transition: background 0.1s;
+	}
+
+	.dialog-buttons {
+		display: flex;
+		gap: 8px;
+		justify-content: center;
+	}
 
 .dialog-button:hover {
 	background: var(--bg-hover);
