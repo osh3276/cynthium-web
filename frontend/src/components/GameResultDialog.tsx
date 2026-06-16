@@ -43,6 +43,7 @@ export default function GameResultDialog({
 		onNext, onClose, isLast,
 	}: Props) {
 	const userWon = userScore > autoScore;
+	const isTie = userScore === autoScore;
 
 	const rows: ScoreRow[] = [
 		{ label: "Score", userVal: `${Math.round(userScore)} (${userGrade})`, autoVal: `${Math.round(autoScore)} (${autoGrade})` },
@@ -55,8 +56,8 @@ export default function GameResultDialog({
 		<div className="dialog-overlay">
 			<div className="dialog">
 				<h2 className="dialog-title">Round {round} of {totalRounds} — {siteName}</h2>
-				<div className={`dialog-result ${userWon ? "user-win" : "auto-win"}`}>
-					{userWon ? "You win!" : "Autodesigner wins!"}
+				<div className={`dialog-result ${isTie ? "tie" : userWon ? "user-win" : "auto-win"}`}>
+					{isTie ? "Tie!" : userWon ? "You win!" : "Autodesigner wins!"}
 				</div>
 				<table className="dialog-score-table">
 					<thead>

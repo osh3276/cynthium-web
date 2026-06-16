@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useLayoutEffect } from "react";
-import type { MapPayload, Waypoint, AutodesignResult } from "../types";
+import { type ReactElement } from "react";
+import type { MapPayload, Waypoint, AutodesignResult, SimulationStats } from "../types";
 import type { LoadStatus } from "../App";
 
 interface Props {
@@ -10,9 +11,11 @@ interface Props {
 	onAddWaypoint: (wp: Waypoint) => void;
 	gameStartPoint?: Waypoint | null;
 	gameEndPoint?: Waypoint | null;
+	manualStats: SimulationStats | null;
+	autoStats: SimulationStats | null;
 }
 
-export default function MapView({ mapData, status, waypoints, autodesignResult, onAddWaypoint, gameStartPoint, gameEndPoint }: Props) {
+export default function MapView({ mapData, status, waypoints, autodesignResult, onAddWaypoint, gameStartPoint, gameEndPoint, manualStats, autoStats }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const imgRef = useRef<HTMLImageElement | null>(null);
@@ -239,8 +242,8 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 								const iy = imgNatural.h - ((wp.y - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
 								return (
 									<g key={i}>
-										<circle cx={ix} cy={iy} r={6} fill="white" stroke="black" strokeWidth={1.5} />
-										<text x={ix + 8} y={iy + 3} fill="white" fontSize={11} stroke="black" strokeWidth={0.4}>
+										<circle cx={ix} cy={iy} r={4} fill="white" stroke="black" strokeWidth={1.2} />
+										<text x={ix + 6} y={iy + 2} fill="white" fontSize={9} stroke="black" strokeWidth={0.3}>
 											{i + 1}
 										</text>
 									</g>
@@ -260,19 +263,58 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 									}).join(" ")}
 								/>
 							)}
-							{autodesignResult && autodesignResult.path_xy.length > 1 && (
-								<polyline
-									fill="none"
-									stroke="#4fc3f7"
-									strokeWidth={2}
-									points={autodesignResult.path_xy.map((p) => {
-										const b = mapData!.bounds;
-										const ix = ((p[0] - b.left) / (b.right - b.left)) * imgNatural.w;
-										const iy = imgNatural.h - ((p[1] - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
-										return `${ix},${iy}`;
-									}).join(" ")}
-								/>
-							)}
+							{autodesignResult && autodesignResult.path_xy.length > 1 && (() => {
+								const b = mapData!.bounds;
+								let autoPts = autodesignResult.path_xy;
+								const failArr = autoStats?.failure_xy;
+
+								if (failArr && Array.isArray(failArr) && failArr.length >= 2) {
+									const fx = failArr[0] as number;
+									const fy = failArr[1] as number;
+									let cutIdx = autoPts.length - 1;
+									let minDist = Infinity;
+									for (let i = 0; i < autoPts.length - 1; i++) {
+										const a = autoPts[i];
+										const b2 = autoPts[i + 1];
+										const dx = b2[0] - a[0];
+										const dy = b2[1] - a[1];
+										const lenSq = dx * dx + dy * dy;
+										let t = 0;
+										if (lenSq > 0) {
+											t = ((fx - a[0]) * dx + (fy - a[1]) * dy) / lenSq;
+											t = Math.max(0, Math.min(1, t));
+										}
+										const cx = a[0] + t * dx;
+										const cy = a[1] + t * dy;
+										const rx = fx - cx;
+										const ry = fy - cy;
+										const d = rx * rx + ry * ry;
+										if (d < minDist) {
+											minDist = d;
+											cutIdx = i;
+										}
+									}
+									autoPts = autoPts.slice(0, cutIdx + 1);
+									autoPts.push([fx, fy]);
+								}
+
+								return (
+									<polyline
+										fill="none"
+										stroke="#4fc3f7"
+										strokeWidth={2}
+										points={autoPts.map((p) => {
+											const ix = ((p[0] - b.left) / (b.right - b.left)) * imgNatural.w;
+											const iy = imgNatural.h - ((p[1] - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
+											return `${ix},${iy}`;
+										}).join(" ")}
+									/>
+								);
+							})()}
+
+							{/* Failure indicators — show red X at failure_xy if present */}
+							{_renderFailureMarker(manualStats, mapData!, imgNatural)}
+							{_renderFailureMarker(autoStats, mapData!, imgNatural)}
 						</svg>
 					</div>
 					{mapData && (
@@ -283,5 +325,22 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 				</>
 			)}
 		</div>
+	);
+}
+
+function _renderFailureMarker(stats: SimulationStats | null, mapData: MapPayload, imgNatural: { w: number; h: number }): ReactElement | null {
+	const arr = stats?.failure_xy;
+	if (!arr || !Array.isArray(arr) || arr.length < 2) return null;
+	const fx = arr[0] as number;
+	const fy = arr[1] as number;
+	const b = mapData.bounds;
+	const ix = ((fx - b.left) / (b.right - b.left)) * imgNatural.w;
+	const iy = imgNatural.h - ((fy - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
+	return (
+		<g>
+			<circle cx={ix} cy={iy} r={10} fill="none" stroke="#ff1744" strokeWidth={3} />
+			<line x1={ix - 6} y1={iy - 6} x2={ix + 6} y2={iy + 6} stroke="#ff1744" strokeWidth={3} />
+			<line x1={ix - 6} y1={iy + 6} x2={ix + 6} y2={iy - 6} stroke="#ff1744" strokeWidth={3} />
+		</g>
 	);
 }

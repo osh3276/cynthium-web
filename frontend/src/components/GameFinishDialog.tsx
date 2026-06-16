@@ -23,13 +23,14 @@ export default function GameFinishDialog({ rounds, onFinish }: Props) {
 	const userTotal = entries.reduce((s, e) => s + e.userScore, 0);
 	const autoTotal = entries.reduce((s, e) => s + e.autoScore, 0);
 	const userWon = userTotal > autoTotal;
+	const isTie = userTotal === autoTotal;
 
 	return (
 		<div className="dialog-overlay">
 			<div className="dialog">
 				<h2 className="dialog-title">Game Over</h2>
-				<div className={`dialog-result ${userWon ? "user-win" : "auto-win"}`}>
-					{userWon ? "You win the game!" : "Autodesigner wins the game!"}
+				<div className={`dialog-result ${isTie ? "tie" : userWon ? "user-win" : "auto-win"}`}>
+					{isTie ? "Game is a Tie!" : userWon ? "You win the game!" : "Autodesigner wins the game!"}
 				</div>
 				<p style={{ textAlign: "center", fontSize: 11, color: "var(--text-dim)", marginBottom: 8 }}>
 					Final score: You {Math.round(userTotal)} — Autodesigner {Math.round(autoTotal)}

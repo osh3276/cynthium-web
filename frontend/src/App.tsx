@@ -50,6 +50,53 @@ function randInRange(min: number, max: number): number {
 	return min + Math.random() * (max - min);
 }
 
+/** Bilinear sample from the height_data grid */
+function sampleElevation(x: number, y: number, hdata: number[][], bounds: { left: number; right: number; bottom: number; top: number }): number | null {
+	const rows = hdata.length;
+	const cols = hdata[0].length;
+	if (!rows || !cols) return null;
+	const tx = (x - bounds.left) / (bounds.right - bounds.left);
+	const ty = (y - bounds.bottom) / (bounds.top - bounds.bottom);
+	const fc = tx * (cols - 1);
+	const fr = (1 - ty) * (rows - 1);
+	const c0 = Math.floor(fc);
+	const c1 = Math.min(c0 + 1, cols - 1);
+	const r0 = Math.floor(fr);
+	const r1 = Math.min(r0 + 1, rows - 1);
+	if (r0 < 0 || r0 >= rows || c0 < 0 || c0 >= cols) return null;
+	const fracC = fc - c0;
+	const fracR = fr - r0;
+	const h00 = hdata[r0][c0];
+	const h10 = hdata[r0][c1];
+	const h01 = hdata[r1][c0];
+	const h11 = hdata[r1][c1];
+	const top = h00 + (h10 - h00) * fracC;
+	const bottom = h01 + (h11 - h01) * fracC;
+	return top + (bottom - top) * fracR;
+}
+
+/** Estimate terrain roughness at a point by checking height variation ±3 cells away */
+function terrainRoughness(x: number, y: number, hdata: number[][], bounds: { left: number; right: number; bottom: number; top: number }): number {
+	const rows = hdata.length;
+	const cols = hdata[0].length;
+	const resX = (bounds.right - bounds.left) / (cols - 1);
+	const resY = (bounds.top - bounds.bottom) / (rows - 1);
+	const step = Math.max(resX, resY) * 3;
+	const z0 = sampleElevation(x, y, hdata, bounds);
+	if (z0 == null) return Infinity;
+	const offsets = [[step, 0], [-step, 0], [0, step], [0, -step]];
+	let total = 0;
+	let n = 0;
+	for (const [dx, dy] of offsets) {
+		const z = sampleElevation(x + dx, y + dy, hdata, bounds);
+		if (z != null) {
+			total += Math.abs(z - z0);
+			n++;
+		}
+	}
+	return n > 0 ? total / n : Infinity;
+}
+
 function App() {
 	const [mapData, setMapData] = useState<MapPayload | null>(null);
 	const [status, setStatus] = useState<LoadStatus>("idle");
@@ -146,6 +193,10 @@ function App() {
 			if (!res.ok) throw new Error(await res.text());
 			const data: AutodesignResult = await res.json();
 			setAutodesignResult(data);
+			// If autodesign returned simulation failure info, show it on the map
+			if (data.simulation?.failure_xy) {
+				setAutoStats(data.simulation);
+			}
 		} catch (err) {
 			showError(err);
 		} finally {
@@ -233,15 +284,87 @@ function App() {
 			if (!res.ok) throw new Error(await res.text());
 			const data: MapPayload = await res.json();
 			const b = data.bounds;
-			const margin = (b.right - b.left) * 0.15;
-			const marginV = (b.top - b.bottom) * 0.15;
-			const start = { x: randInRange(b.left + margin, b.left + margin * 2), y: randInRange(b.bottom + marginV, b.top - marginV) };
-			const end = { x: randInRange(b.right - margin * 2, b.right - margin), y: randInRange(b.bottom + marginV, b.top - marginV) };
+			const hdata = data.height_data;
+			const cx = (b.left + b.right) / 2;
+			const cy = (b.bottom + b.top) / 2;
+			const halfSpan = Math.min(b.right - b.left, b.top - b.bottom, 7000);
+
+			// Generate candidates and pick the flattest pair
+			let best: { start: Waypoint; end: Waypoint } | null = null;
+			let bestScore = Infinity;
+			for (let i = 0; i < 25; i++) {
+				const s = { x: randInRange(cx - halfSpan, cx + halfSpan), y: randInRange(cy - halfSpan, cy + halfSpan) };
+				const e = { x: randInRange(cx - halfSpan, cx + halfSpan), y: randInRange(cy - halfSpan, cy + halfSpan) };
+				const dist = Math.hypot(e.x - s.x, e.y - s.y);
+				if (dist < 2000 || dist > 10000) continue;
+				let score = 0;
+				if (hdata) {
+					score += terrainRoughness(s.x, s.y, hdata, b);
+					score += terrainRoughness(e.x, e.y, hdata, b);
+				}
+				if (score < bestScore) {
+					bestScore = score;
+					best = { start: s, end: e };
+				}
+			}
+			if (best) return best;
+			// Fallback: just return any valid pair
+			const start = { x: randInRange(cx - halfSpan, cx + halfSpan), y: randInRange(cy - halfSpan, cy + halfSpan) };
+			const end = { x: randInRange(cx - halfSpan, cx + halfSpan), y: randInRange(cy - halfSpan, cy + halfSpan) };
 			return { start, end };
 		} catch {
 			return null;
 		}
 	}, []);
+
+	const autoBody = (waypoints_xy: number[][]) => JSON.stringify({
+		waypoints_xy,
+		slope_weight: 0.3,
+		sun_weight: 0.3,
+		meteor_weight: 0.05,
+		path_mode: "direct",
+		rover_mass_kg: CURIOSITY.mass_kg,
+		rover_power_hp: CURIOSITY.power_hp,
+		rover_friction_coeff: CURIOSITY.wheel_friction_coeff,
+		rover_crr: CURIOSITY.rolling_resistance_coeff,
+	});
+
+	const simBody = (path_xy: [number, number][]) => JSON.stringify({
+		path_xy,
+		rover_mass_kg: CURIOSITY.mass_kg,
+		rover_power_hp: CURIOSITY.power_hp,
+		rover_friction_coeff: CURIOSITY.wheel_friction_coeff,
+		rover_crr: CURIOSITY.rolling_resistance_coeff,
+	});
+
+	async function precalcRound(round: GameRound, siteName: string): Promise<void> {
+		try {
+			const autoRes = await fetch(`/api/sites/${encodeURIComponent(siteName)}/autodesign`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: autoBody([[round.startPoint.x, round.startPoint.y], [round.endPoint.x, round.endPoint.y]]),
+			});
+			if (!autoRes.ok) return;
+			const autoData: AutodesignResult = await autoRes.json();
+			if (autoData.path_xy.length >= 2) {
+				round.autoPath = autoData.path_xy;
+				// Use inline simulation result if available (even for failed paths)
+				if (autoData.simulation) {
+					round.autoStats = autoData.simulation;
+				} else {
+					// Fallback: run separate simulate for feasible paths
+					const autoSimRes = await fetch(`/api/sites/${encodeURIComponent(siteName)}/simulate`, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: simBody(autoData.path_xy as [number, number][]),
+					});
+					if (autoSimRes.ok) {
+						round.autoStats = await autoSimRes.json();
+					}
+				}
+			}
+		} catch {}
+	}
 
 	// ---- Game handlers ----
 	const handleStartGame = useCallback(async () => {
@@ -284,6 +407,10 @@ function App() {
 				setGameStartPoint(rounds[0].startPoint);
 				setGameEndPoint(rounds[0].endPoint);
 				await loadSiteMap(rounds[0].siteName, rounds[0].mapType, "2026-05-13");
+
+				// Pre-calculate autopath for first round (hidden, only used on Finish Path)
+				await precalcRound(rounds[0], rounds[0].siteName);
+				// Don't setAutodesignResult/setAutoStats here — keep them null until Finish Path
 			} finally {
 				setGameLoading(false);
 			}
@@ -296,15 +423,22 @@ function App() {
 			setShowGameFinish(true);
 			return;
 		}
+		const nextRound = gameState.rounds[next];
 		setGameState((prev) => prev ? { ...prev, currentRound: next } : prev);
-		setGameStartPoint(gameState.rounds[next].startPoint);
-		setGameEndPoint(gameState.rounds[next].endPoint);
+		setGameStartPoint(nextRound.startPoint);
+		setGameEndPoint(nextRound.endPoint);
 		setWaypoints([]);
 		setAutodesignResult(null);
 		setManualStats(null);
 		setAutoStats(null);
 		setShowGameResult(false);
-		await loadSiteMap(gameState.rounds[next].siteName, gameState.rounds[next].mapType, "2026-05-13");
+		await loadSiteMap(nextRound.siteName, nextRound.mapType, "2026-05-13");
+
+		// Pre-calculate autopath for this round (hidden, only used on Finish Path)
+		if (!nextRound.autoPath) {
+			await precalcRound(nextRound, nextRound.siteName);
+		}
+		// Don't setAutodesignResult/setAutoStats here — keep them null until Finish Path
 	}, [gameState, loadSiteMap]);
 
 	const handleFinishPath = useCallback(async () => {
@@ -331,15 +465,6 @@ function App() {
 
 		setSimulating(true);
 		setManualStats(null);
-		setAutoStats(null);
-
-		const simBody = (path_xy: [number, number][]) => JSON.stringify({
-			path_xy,
-			rover_mass_kg: CURIOSITY.mass_kg,
-			rover_power_hp: CURIOSITY.power_hp,
-			rover_friction_coeff: CURIOSITY.wheel_friction_coeff,
-			rover_crr: CURIOSITY.rolling_resistance_coeff,
-		});
 
 		try {
 				// 1. Simulate user path
@@ -353,49 +478,20 @@ function App() {
 
 				round.userPath = waypoints;
 				round.userStats = userStats;
-				round.userScore = (userStats["traversal_score"] as number) || 0;
+				const userFeasible = (userStats["traverse_feasible"] as number) >= 0.5;
+				round.userScore = userFeasible ? ((userStats["traversal_score"] as number) || 0) : 0;
 				setManualStats(userStats);
 
-				// 2. Run autodesign with game weights (best-effort)
-				let autoStats: SimulationStats = {};
-				try {
-					const autoRes = await fetch(`/api/sites/${encodeURIComponent(currentSite)}/autodesign`, {
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({
-							waypoints_xy: [[round.startPoint.x, round.startPoint.y], [round.endPoint.x, round.endPoint.y]],
-							slope_weight: 0.3,
-							sun_weight: 0.3,
-							meteor_weight: 0.05,
-							path_mode: "direct",
-							rover_mass_kg: CURIOSITY.mass_kg,
-							rover_power_hp: CURIOSITY.power_hp,
-							rover_friction_coeff: CURIOSITY.wheel_friction_coeff,
-							rover_crr: CURIOSITY.rolling_resistance_coeff,
-						}),
-					});
-					if (autoRes.ok) {
-						const autoData: AutodesignResult = await autoRes.json();
-						round.autoPath = autoData.path_xy;
-						setAutodesignResult(autoData);
-
-						// 3. Simulate auto path
-						if (autoData.path_xy.length >= 2) {
-							const autoSimRes = await fetch(`/api/sites/${encodeURIComponent(currentSite)}/simulate`, {
-								method: "POST",
-								headers: { "Content-Type": "application/json" },
-								body: simBody(autoData.path_xy as [number, number][]),
-							});
-							if (autoSimRes.ok) {
-								autoStats = await autoSimRes.json();
-							}
-						}
-					}
-				} catch {}
-
-				round.autoStats = autoStats;
-				round.autoScore = (autoStats["traversal_score"] as number) || 0;
+				// 2. Use pre-calculated autopath (computed during round loading)
+				const autoStats: SimulationStats = round.autoStats || {};
+				const autoFeasible = (autoStats["traverse_feasible"] as number) >= 0.5;
+				round.autoScore = autoFeasible ? ((autoStats["traversal_score"] as number) || 0) : 0;
 				setAutoStats(Object.keys(autoStats).length > 0 ? autoStats : null);
+
+				// Reveal auto path on the map now
+				if (round.autoPath) {
+					setAutodesignResult({ path_xy: round.autoPath, total_cost: 0, expanded: 0 });
+				}
 
 				setGameState((prev) => prev ? { ...prev, rounds: [...prev.rounds] } : prev);
 				setShowGameResult(true);
@@ -431,14 +527,16 @@ function App() {
 				<div className="left-pane">
 					<div className="view-area">
 						<ViewContainer
-							mapData={mapData}
-							status={status}
-							waypoints={waypoints}
-							autodesignResult={autodesignResult}
-							onAddWaypoint={handleAddWaypoint}
-							gameStartPoint={gameStartPoint}
-							gameEndPoint={gameEndPoint}
-						/>
+								mapData={mapData}
+								status={status}
+								waypoints={waypoints}
+								autodesignResult={autodesignResult}
+								onAddWaypoint={handleAddWaypoint}
+								gameStartPoint={gameStartPoint}
+								gameEndPoint={gameEndPoint}
+								manualStats={manualStats}
+								autoStats={autoStats}
+							/>
 					</div>
 					<div className="resize-handle" onMouseDown={handleResultsResize} />
 					{!gameState?.active && (

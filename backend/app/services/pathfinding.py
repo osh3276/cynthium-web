@@ -219,6 +219,7 @@ def compute_autodesign(
 
 	blocked_pixels: set[tuple[int, int]] = set()
 	site_path_xy: list[list[float]] = []
+	last_result: dict | None = None
 
 	for attempt in range(10):
 		all_xy: list[tuple[float, float]] = []
@@ -282,6 +283,7 @@ def compute_autodesign(
 		try:
 			result = run_simulation(site_name, site_path_xy, rover)
 			feasible = result.get("traverse_feasible", 0) >= 0.5
+			last_result = result  # keep last sim result for failure info
 		except Exception:
 			feasible = False
 
@@ -301,9 +303,15 @@ def compute_autodesign(
 
 		print(f"[TIMER] Autodesign attempt {attempt+1} infeasible, retrying with {len(blocked_pixels)} cells blocked")
 
+	# All attempts failed — return the last path + simulation result so frontend can show failure
 	elapsed = time.perf_counter() - t_start
-	print(f"[TIMER] Autodesign {elapsed:.1f}s | gave up after 10 attempts")
-	return {"error": "No traversable path found after 10 attempts \u2014 the rover cannot handle this terrain with the current settings"}
+	print(f"[TIMER] Autodesign {elapsed:.1f}s | gave up after 10 attempts, returning last path with failure info")
+	return {
+		"path_xy": site_path_xy,
+		"total_cost": 0.0,
+		"expanded": 0,
+		"simulation": last_result or {},
+	}
 
 
 def _compute_segment(

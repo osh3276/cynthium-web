@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { MapPayload, Waypoint, AutodesignResult } from "../types";
+import type { MapPayload, Waypoint, AutodesignResult, SimulationStats } from "../types";
 import type { LoadStatus } from "../App";
 
 interface Props {
@@ -9,13 +9,15 @@ interface Props {
 	status: LoadStatus;
 	waypoints: Waypoint[];
 	autodesignResult: AutodesignResult | null;
+	manualStats: SimulationStats | null;
+	autoStats: SimulationStats | null;
 }
 
 function reflectX(x: number, b: { left: number; right: number }): number {
 	return b.left + b.right - x;
 }
 
-export default function TerrainView({ mapData, status, waypoints, autodesignResult }: Props) {
+export default function TerrainView({ mapData, status, waypoints, autodesignResult, manualStats, autoStats }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const prevShapeKey = useRef<string | null>(null);
 	const sceneRef = useRef<{
@@ -212,74 +214,111 @@ export default function TerrainView({ mapData, status, waypoints, autodesignResu
 		);
 	}, [mapData?.sun_azimuth]);
 
-	// Update waypoints and paths
+	// Update waypoints, paths, and failure indicators
 	useEffect(() => {
 		const ctx = sceneRef.current;
 		if (!ctx) return;
 
-		while (ctx.wpGroup.children.length > 0) {
-			const child = ctx.wpGroup.children[0];
-			if (child instanceof THREE.Mesh) {
-				child.geometry.dispose();
-				if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
-				else child.material.dispose();
+		// Clear waypoints group
+	while (ctx.wpGroup.children.length > 0) {
+		const child = ctx.wpGroup.children[0];
+		if (child instanceof THREE.Mesh) {
+			child.geometry.dispose();
+			if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
+			else child.material.dispose();
+		}
+		ctx.wpGroup.remove(child);
+	}
+
+	// Clear old path lines
+	if (ctx.pathLine) {
+		ctx.scene.remove(ctx.pathLine);
+		ctx.pathLine.geometry.dispose();
+		(ctx.pathLine.material as THREE.Material).dispose();
+		ctx.pathLine = null;
+	}
+	if (ctx.autoLine) {
+		ctx.scene.remove(ctx.autoLine);
+		ctx.autoLine.geometry.dispose();
+		(ctx.autoLine.material as THREE.Material).dispose();
+		ctx.autoLine = null;
+	}
+
+	if (!mapData || !mapData.height_data) return;
+
+	const mesh = ctx.mesh;
+	if (!mesh) return;
+
+	const b = mapData.bounds;
+	const Z_OFFSET = 5;
+
+	// Waypoints
+	const sphereGeo = new THREE.SphereGeometry(40, 12, 12);
+	const sphereMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x4488ff, emissiveIntensity: 0.3 });
+	waypoints.forEach((wp) => {
+		const s = new THREE.Mesh(sphereGeo, sphereMat);
+		const z = _sampleHeight(wp.x, wp.y, mapData!);
+		s.position.set(reflectX(wp.x, b), z + 20, wp.y);
+		ctx.wpGroup.add(s);
+	});
+
+	// Manual path line
+	if (waypoints.length > 1) {
+		const pts = _surfaceLine(waypoints, mapData, Z_OFFSET, reflectX);
+		const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
+		const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
+		const line = new THREE.Line(lineGeo, lineMat);
+		ctx.scene.add(line);
+		ctx.pathLine = line;
+	}
+
+	// Auto path line (truncated at failure point if failure_xy is present)
+	if (autodesignResult && autodesignResult.path_xy.length > 1) {
+		let autoPts = autodesignResult.path_xy.map((p) => ({ x: p[0], y: p[1] }));
+		const failArr = autoStats?.failure_xy;
+
+		if (failArr && Array.isArray(failArr) && failArr.length >= 2) {
+			const fx = failArr[0] as number;
+			const fy = failArr[1] as number;
+			// Find segment containing the failure point
+			let cutIdx = autoPts.length - 1;
+			let minDist = Infinity;
+			for (let i = 0; i < autoPts.length - 1; i++) {
+				const a = autoPts[i];
+				const b2 = autoPts[i + 1];
+				const d = _pointToSegmentDistSq(fx, fy, a.x, a.y, b2.x, b2.y);
+				if (d < minDist) {
+					minDist = d;
+					cutIdx = i;
+				}
 			}
-			ctx.wpGroup.remove(child);
+			// Truncate: points up to cutIdx + interpolated failure point
+			autoPts = autoPts.slice(0, cutIdx + 1);
+			autoPts.push({ x: fx, y: fy });
 		}
 
-		if (ctx.pathLine) {
-			ctx.scene.remove(ctx.pathLine);
-			ctx.pathLine.geometry.dispose();
-			(ctx.pathLine.material as THREE.Material).dispose();
-			ctx.pathLine = null;
-		}
-		if (ctx.autoLine) {
-			ctx.scene.remove(ctx.autoLine);
-			ctx.autoLine.geometry.dispose();
-			(ctx.autoLine.material as THREE.Material).dispose();
-			ctx.autoLine = null;
-		}
+		const pts = _surfaceLine(autoPts, mapData, Z_OFFSET, reflectX);
+		const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
+		const lineMat = new THREE.LineBasicMaterial({ color: 0x4fc3f7, linewidth: 2 });
+		const line = new THREE.Line(lineGeo, lineMat);
+		ctx.scene.add(line);
+		ctx.autoLine = line;
+	}
 
-		if (!mapData || !mapData.height_data) return;
-
-		const mesh = ctx.mesh;
-		if (!mesh) return;
-
-		const b = mapData.bounds;
-		const Z_OFFSET = 5;
-
-		const sphereGeo = new THREE.SphereGeometry(40, 12, 12);
-		const sphereMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x4488ff, emissiveIntensity: 0.3 });
-		waypoints.forEach((wp) => {
-			const s = new THREE.Mesh(sphereGeo, sphereMat);
-			const z = _sampleHeight(wp.x, wp.y, mapData!);
-			s.position.set(reflectX(wp.x, b), z + 20, wp.y);
-			ctx.wpGroup.add(s);
-		});
-
-		if (waypoints.length > 1) {
-			const pts = _surfaceLine(waypoints, mapData, Z_OFFSET, reflectX);
-			const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
-			const lineMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6 });
-			const line = new THREE.Line(lineGeo, lineMat);
-			ctx.scene.add(line);
-			ctx.pathLine = line;
-		}
-
-		if (autodesignResult && autodesignResult.path_xy.length > 1) {
-			const pts = _surfaceLine(
-				autodesignResult.path_xy.map((p) => ({ x: p[0], y: p[1] })),
-				mapData,
-				Z_OFFSET,
-				reflectX,
-			);
-			const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
-			const lineMat = new THREE.LineBasicMaterial({ color: 0x4fc3f7, linewidth: 2 });
-			const line = new THREE.Line(lineGeo, lineMat);
-			ctx.scene.add(line);
-			ctx.autoLine = line;
-		}
-	}, [mapData, waypoints, autodesignResult]);
+	// Failure indicators — render red sphere wherever failure_xy exists
+	const failGeo = new THREE.SphereGeometry(55, 16, 16);
+	[manualStats, autoStats].forEach((stats) => {
+		const arr = stats?.failure_xy;
+		if (!arr || !Array.isArray(arr) || arr.length < 2) return;
+		const fx = arr[0] as number;
+		const fy = arr[1] as number;
+		const fz = _sampleHeight(fx, fy, mapData);
+		const failMat = new THREE.MeshStandardMaterial({ color: 0xff1744, emissive: 0xff1744, emissiveIntensity: 0.5 });
+		const failSphere = new THREE.Mesh(failGeo, failMat);
+		failSphere.position.set(reflectX(fx, b), fz + 25, fy);
+		ctx.wpGroup.add(failSphere);
+	});
+}, [mapData, waypoints, autodesignResult, manualStats, autoStats]);
 
 	return (
 		<div ref={containerRef} className="terrain-view">
@@ -310,12 +349,55 @@ function _sampleHeight(x: number, y: number, mapData: MapPayload): number {
 	const rows = hdata.length;
 	const cols = hdata[0].length;
 	const b = mapData.bounds;
+
+	// Fractional grid coordinates
 	const tx = (x - b.left) / (b.right - b.left);
 	const ty = (y - b.bottom) / (b.top - b.bottom);
-	const c = Math.round(tx * (cols - 1));
-	const r = Math.round((1 - ty) * (rows - 1));
-	if (r < 0 || r >= rows || c < 0 || c >= cols) return 0;
-	return hdata[r][c];
+	const fc = tx * (cols - 1);
+	const fr = (1 - ty) * (rows - 1);
+
+	const c0 = Math.floor(fc);
+	const c1 = Math.min(c0 + 1, cols - 1);
+	const r0 = Math.floor(fr);
+	const r1 = Math.min(r0 + 1, rows - 1);
+
+	if (r0 < 0 || r0 >= rows || c0 < 0 || c0 >= cols) return 0;
+
+	const fracC = fc - c0;
+	const fracR = fr - r0;
+
+	const h00 = hdata[r0][c0];
+	const h10 = hdata[r0][c1];
+	const h01 = hdata[r1][c0];
+	const h11 = hdata[r1][c1];
+
+	// Bilinear interpolation — matches terrain mesh surface exactly
+	const top = h00 + (h10 - h00) * fracC;
+	const bottom = h01 + (h11 - h01) * fracC;
+	return top + (bottom - top) * fracR;
+}
+
+/** Squared distance from point (px,py) to segment (ax,ay)-(bx,by) */
+function _pointToSegmentDistSq(
+	px: number, py: number,
+	ax: number, ay: number,
+	bx: number, by: number,
+): number {
+	const dx = bx - ax;
+	const dy = by - ay;
+	const lenSq = dx * dx + dy * dy;
+	if (lenSq === 0) {
+		const ex = px - ax;
+		const ey = py - ay;
+		return ex * ex + ey * ey;
+	}
+	let t = ((px - ax) * dx + (py - ay) * dy) / lenSq;
+	t = Math.max(0, Math.min(1, t));
+	const cx = ax + t * dx;
+	const cy = ay + t * dy;
+	const rx = px - cx;
+	const ry = py - cy;
+	return rx * rx + ry * ry;
 }
 
 function _surfaceLine(

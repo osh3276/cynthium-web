@@ -42,6 +42,7 @@ export interface AutodesignResult {
 	path_xy: number[][];
 	total_cost: number;
 	expanded: number;
+	simulation?: SimulationStats;
 }
 
 export interface AutodesignConfig {
@@ -78,7 +79,8 @@ export interface TraversalScore {
 }
 
 export interface SimulationStats {
-	[key: string]: number | string;
+	[key: string]: number | string | number[] | undefined;
+	failure_xy?: [number, number];
 }
 
 export interface GameRound {

@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import MapView from "./MapView";
 import TerrainView from "./TerrainView";
-import type { MapPayload, Waypoint, AutodesignResult } from "../types";
+import type { MapPayload, Waypoint, AutodesignResult, SimulationStats } from "../types";
 import type { LoadStatus } from "../App";
 
 interface Props {
@@ -12,9 +12,11 @@ interface Props {
 	onAddWaypoint: (wp: Waypoint) => void;
 	gameStartPoint?: Waypoint | null;
 	gameEndPoint?: Waypoint | null;
+	manualStats: SimulationStats | null;
+	autoStats: SimulationStats | null;
 }
 
-export default function ViewContainer({ mapData, status, waypoints, autodesignResult, onAddWaypoint, gameStartPoint, gameEndPoint }: Props) {
+export default function ViewContainer({ mapData, status, waypoints, autodesignResult, onAddWaypoint, gameStartPoint, gameEndPoint, manualStats, autoStats }: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [splitPos, setSplitPos] = useState(50);
 
@@ -43,11 +45,11 @@ export default function ViewContainer({ mapData, status, waypoints, autodesignRe
 	return (
 		<div ref={containerRef} className="view-container">
 			<div className="view-pane" style={{ width: `${splitPos}%` }}>
-				<MapView mapData={mapData} status={status} waypoints={waypoints} autodesignResult={autodesignResult} onAddWaypoint={onAddWaypoint} gameStartPoint={gameStartPoint} gameEndPoint={gameEndPoint} />
+				<MapView mapData={mapData} status={status} waypoints={waypoints} autodesignResult={autodesignResult} onAddWaypoint={onAddWaypoint} gameStartPoint={gameStartPoint} gameEndPoint={gameEndPoint} manualStats={manualStats} autoStats={autoStats} />
 			</div>
 			<div className="view-handle" onMouseDown={handleMouseDown} />
 			<div className="view-pane" style={{ width: `${100 - splitPos}%` }}>
-				<TerrainView mapData={mapData} status={status} waypoints={waypoints} autodesignResult={autodesignResult} />
+				<TerrainView mapData={mapData} status={status} waypoints={waypoints} autodesignResult={autodesignResult} manualStats={manualStats} autoStats={autoStats} />
 			</div>
 		</div>
 	);

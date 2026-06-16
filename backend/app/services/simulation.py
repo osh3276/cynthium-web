@@ -148,10 +148,17 @@ def simulate_rover_over_path(
 		v_sq_next = (v * v) + (2.0 * a * s)
 		if v_sq_next <= 0.0:
 			if a >= 0.0:
+				# Stuck at start of segment - failure at point i
+				failure_xy = [float(pts_xyz[i, 0]), float(pts_xyz[i, 1])]
 				v_next = 0.0
 				dt = 0.0
 			else:
 				s_stop = (v * v) / (-2.0 * a) if v > 0.0 else 0.0
+				frac = s_stop / s if s > 0 else 0.0
+				failure_xy = [
+					float(pts_xyz[i, 0] + frac * (pts_xyz[i + 1, 0] - pts_xyz[i, 0])),
+					float(pts_xyz[i, 1] + frac * (pts_xyz[i + 1, 1] - pts_xyz[i, 1])),
+				]
 				dt = (v / (-a)) if v > 0.0 else 0.0
 				d_total += float(s_stop)
 				t_total += float(dt)
@@ -164,17 +171,18 @@ def simulate_rover_over_path(
 						illum = float(illum_map[ri, ci])
 						if np.isfinite(illum):
 							energy_j_per_m2 += illum * float(dt)
-				min_v = min(min_v, 0.0)
-				max_v = max(max_v, float(v))
-				return {
-					"traverse_feasible": 0.0,
-					"traversal_time_s": float("inf"),
-					"average_velocity_mps": 0.0,
-					"min_velocity_mps": 0.0 if min_v == float("inf") else float(min_v),
-					"max_velocity_mps": float(max_v),
-					"solar_energy_per_m2_j": float(energy_j_per_m2),
-					"avg_solar_illumination_w_per_m2": 0.0,
-				}
+			min_v = min(min_v, 0.0)
+			max_v = max(max_v, float(v))
+			return {
+				"traverse_feasible": 0.0,
+				"traversal_time_s": float("inf"),
+				"average_velocity_mps": 0.0,
+				"min_velocity_mps": 0.0 if min_v == float("inf") else float(min_v),
+				"max_velocity_mps": float(max_v),
+				"solar_energy_per_m2_j": float(energy_j_per_m2),
+				"avg_solar_illumination_w_per_m2": 0.0,
+				"failure_xy": failure_xy,
+			}
 
 		v_next = float(np.sqrt(v_sq_next))
 		den = float(v + v_next)
@@ -327,7 +335,7 @@ def compute_traversal_dynamics(
 		mu_upper_hint=mu,
 	)
 
-	return {
+	result = {
 		"average_velocity_mps": float(physics["average_velocity_mps"]),
 		"min_velocity_mps": float(physics["min_velocity_mps"]),
 		"max_velocity_mps": float(physics["max_velocity_mps"]),
@@ -339,6 +347,10 @@ def compute_traversal_dynamics(
 		"required_wheel_friction_coeff": float(required_mu_dynamic),
 		"required_climb_slope_deg": float(np.degrees(np.arctan(required_mu_dynamic))),
 	}
+	# Pass through failure point if simulation failed
+	if "failure_xy" in physics:
+		result["failure_xy"] = physics["failure_xy"]
+	return result
 
 
 EMPTY_PATH_STATS = {
