@@ -23,11 +23,11 @@ function showError(err: unknown) {
 	alert(msg);
 }
 
-const DEFAULT_ROVER: RoverSettings = {
-	mass_kg: 150.0,
-	power_hp: 0.2,
-	wheel_friction_coeff: 0.6,
-	rolling_resistance_coeff: 0.1,
+const CURIOSITY: RoverSettings = {
+	mass_kg: 899.0,
+	power_hp: 0.13,
+	wheel_friction_coeff: 0.35,
+	rolling_resistance_coeff: 0.02,
 };
 
 const LRV_ROVER: RoverSettings = {
@@ -57,7 +57,7 @@ function App() {
 	const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
 	const [autodesignResult, setAutodesignResult] = useState<AutodesignResult | null>(null);
 	const [autodesignRunning, setAutodesignRunning] = useState(false);
-	const [roverSettings, setRoverSettings] = useState<RoverSettings>(DEFAULT_ROVER);
+	const [roverSettings, setRoverSettings] = useState<RoverSettings>(CURIOSITY);
 	const [manualStats, setManualStats] = useState<SimulationStats | null>(null);
 	const [autoStats, setAutoStats] = useState<SimulationStats | null>(null);
 	const [simulating, setSimulating] = useState(false);
@@ -273,7 +273,7 @@ function App() {
 				});
 				const rounds = await Promise.all(roundPromises);
 
-				setRoverSettings(LRV_ROVER);
+				setRoverSettings(CURIOSITY);
 				setGameState({ active: true, rounds, currentRound: 0, finished: false });
 				setShowGameResult(false);
 				setShowGameFinish(false);
@@ -335,67 +335,75 @@ function App() {
 
 		const simBody = (path_xy: [number, number][]) => JSON.stringify({
 			path_xy,
-			rover_mass_kg: LRV_ROVER.mass_kg,
-			rover_power_hp: LRV_ROVER.power_hp,
-			rover_friction_coeff: LRV_ROVER.wheel_friction_coeff,
-			rover_crr: LRV_ROVER.rolling_resistance_coeff,
+			rover_mass_kg: CURIOSITY.mass_kg,
+			rover_power_hp: CURIOSITY.power_hp,
+			rover_friction_coeff: CURIOSITY.wheel_friction_coeff,
+			rover_crr: CURIOSITY.rolling_resistance_coeff,
 		});
 
 		try {
-			// 1. Simulate user path
-			const userRes = await fetch(`/api/sites/${encodeURIComponent(currentSite)}/simulate`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: simBody(manualPath),
-			});
-			if (!userRes.ok) throw new Error(await userRes.text());
-			const userStats: SimulationStats = await userRes.json();
-
-			// 2. Run autodesign with game weights
-			const autoRes = await fetch(`/api/sites/${encodeURIComponent(currentSite)}/autodesign`, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					waypoints_xy: [[round.startPoint.x, round.startPoint.y], [round.endPoint.x, round.endPoint.y]],
-					slope_weight: 0.3,
-					sun_weight: 0.3,
-					meteor_weight: 0.05,
-					path_mode: "direct",
-					rover_mass_kg: LRV_ROVER.mass_kg,
-					rover_power_hp: LRV_ROVER.power_hp,
-					rover_friction_coeff: LRV_ROVER.wheel_friction_coeff,
-					rover_crr: LRV_ROVER.rolling_resistance_coeff,
-				}),
-			});
-			if (!autoRes.ok) throw new Error(await autoRes.text());
-			const autoData: AutodesignResult = await autoRes.json();
-
-			// 3. Simulate auto path
-			const autoStats: SimulationStats = autoData.path_xy.length >= 2
-				? await (await fetch(`/api/sites/${encodeURIComponent(currentSite)}/simulate`, {
+				// 1. Simulate user path
+				const userRes = await fetch(`/api/sites/${encodeURIComponent(currentSite)}/simulate`, {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: simBody(autoData.path_xy as [number, number][]),
-				})).json()
-				: {};
+					body: simBody(manualPath),
+				});
+				if (!userRes.ok) throw new Error(await userRes.text());
+				const userStats: SimulationStats = await userRes.json();
 
-			round.userPath = waypoints;
-			round.autoPath = autoData.path_xy;
-			round.userStats = userStats;
-			round.autoStats = autoStats;
-			round.userScore = (userStats["traversal_score"] as number) || 0;
-			round.autoScore = (autoStats["traversal_score"] as number) || 0;
+				round.userPath = waypoints;
+				round.userStats = userStats;
+				round.userScore = (userStats["traversal_score"] as number) || 0;
+				setManualStats(userStats);
 
-			setManualStats(userStats);
-			setAutoStats(autoStats);
-			setAutodesignResult(autoData);
-			setGameState((prev) => prev ? { ...prev, rounds: [...prev.rounds] } : prev);
-			setShowGameResult(true);
-		} catch (err) {
-			showError(err);
-		} finally {
-			setSimulating(false);
-		}
+				// 2. Run autodesign with game weights (best-effort)
+				let autoStats: SimulationStats = {};
+				try {
+					const autoRes = await fetch(`/api/sites/${encodeURIComponent(currentSite)}/autodesign`, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							waypoints_xy: [[round.startPoint.x, round.startPoint.y], [round.endPoint.x, round.endPoint.y]],
+							slope_weight: 0.3,
+							sun_weight: 0.3,
+							meteor_weight: 0.05,
+							path_mode: "direct",
+							rover_mass_kg: CURIOSITY.mass_kg,
+							rover_power_hp: CURIOSITY.power_hp,
+							rover_friction_coeff: CURIOSITY.wheel_friction_coeff,
+							rover_crr: CURIOSITY.rolling_resistance_coeff,
+						}),
+					});
+					if (autoRes.ok) {
+						const autoData: AutodesignResult = await autoRes.json();
+						round.autoPath = autoData.path_xy;
+						setAutodesignResult(autoData);
+
+						// 3. Simulate auto path
+						if (autoData.path_xy.length >= 2) {
+							const autoSimRes = await fetch(`/api/sites/${encodeURIComponent(currentSite)}/simulate`, {
+								method: "POST",
+								headers: { "Content-Type": "application/json" },
+								body: simBody(autoData.path_xy as [number, number][]),
+							});
+							if (autoSimRes.ok) {
+								autoStats = await autoSimRes.json();
+							}
+						}
+					}
+				} catch {}
+
+				round.autoStats = autoStats;
+				round.autoScore = (autoStats["traversal_score"] as number) || 0;
+				setAutoStats(Object.keys(autoStats).length > 0 ? autoStats : null);
+
+				setGameState((prev) => prev ? { ...prev, rounds: [...prev.rounds] } : prev);
+				setShowGameResult(true);
+			} catch (err) {
+				showError(err);
+			} finally {
+				setSimulating(false);
+			}
 	}, [gameState, currentSite, waypoints, mapData]);
 
 	const handleGameFinish = useCallback(() => {
@@ -404,7 +412,7 @@ function App() {
 		setGameEndPoint(null);
 		setShowGameFinish(false);
 		setShowGameResult(false);
-		setRoverSettings(DEFAULT_ROVER);
+		setRoverSettings(CURIOSITY);
 		setWaypoints([]);
 		setAutodesignResult(null);
 		setManualStats(null);
