@@ -133,7 +133,7 @@ function formatFeasible(stats: SimulationStats | null): string {
 function formatSubscore(stats: SimulationStats | null, def: SubscoreDef): string {
 		const subs = stats?.["traversal_subscores"];
 		if (!subs || typeof subs !== "object") return "-";
-		const val = (subs as Record<string, number>)[def.key];
+		const val = (subs as unknown as Record<string, number>)[def.key];
 		if (val == null || typeof val !== "number") return "-";
 		return `${Math.round(val)}/${def.max}`;
 	}

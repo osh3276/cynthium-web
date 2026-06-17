@@ -30,12 +30,12 @@ const CURIOSITY: RoverSettings = {
 	rolling_resistance_coeff: 0.02,
 };
 
-const LRV_ROVER: RoverSettings = {
-	mass_kg: 210,
-	power_hp: 1.0,
-	wheel_friction_coeff: 0.6,
-	rolling_resistance_coeff: 0.021,
-};
+// const LRV_ROVER: RoverSettings = {
+// 	mass_kg: 210,
+// 	power_hp: 1.0,
+// 	wheel_friction_coeff: 0.6,
+// 	rolling_resistance_coeff: 0.021,
+// };
 
 function shufflePick<T>(arr: T[], n: number): T[] {
 	const copy = [...arr];
