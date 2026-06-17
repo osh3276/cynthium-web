@@ -22,15 +22,16 @@ interface Props {
 		gameEndPoint?: Waypoint | null;
 		onFinishPath?: () => void;
 		onNextRound?: () => void;
+		onStartGame?: () => void;
 		simulating?: boolean;
 	}
 
 export default function Sidebar({
-		onLoadSite, onChangeMapType, onNextRound, status, waypoints, onAddWaypoint,
-		onRemoveWaypoint, onAutodesign, autodesignRunning, autodesignResult,
-		roverSettings, onRoverChange,
-		gameState, gameStartPoint, gameEndPoint, onFinishPath, simulating,
-	}: Props) {
+			onLoadSite, onChangeMapType, onNextRound, status, waypoints, onAddWaypoint,
+			onRemoveWaypoint, onAutodesign, autodesignRunning, autodesignResult,
+			roverSettings, onRoverChange,
+			gameState, gameStartPoint, gameEndPoint, onFinishPath, onStartGame, simulating,
+		}: Props) {
 	const [slopeWeight, setSlopeWeight] = useState("0.3");
 	const [sunWeight, setSunWeight] = useState("0.3");
 	const [meteorWeight, setMeteorWeight] = useState("0.05");
@@ -104,6 +105,12 @@ export default function Sidebar({
 					</>
 				) : (
 					<>
+						<div className="sidebar-divider" />
+						<div className="panel">
+							<button className="panel-button generate-button" onClick={onStartGame} style={{ width: "100%" }}>
+								Start Game
+							</button>
+						</div>
 						<div className="sidebar-divider" />
 						<div className="panel">
 							<h3 className="panel-title">Autodesign</h3>

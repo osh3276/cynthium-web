@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef } from "react";
-import MenuBar from "./components/MenuBar";
 import ViewContainer from "./components/ViewContainer";
 import SimulationResultsPanel from "./components/SimulationResultsPanel";
 import Sidebar from "./components/Sidebar";
@@ -522,7 +521,6 @@ function App() {
 
 	return (
 		<div className="app-layout">
-			<MenuBar onStartGame={handleStartGame} />
 			<div className="main-content">
 				<div className="left-pane">
 					<div className="view-area">
@@ -552,24 +550,25 @@ function App() {
 				</div>
 				<div className="sidebar-pane">
 						<Sidebar
-							onLoadSite={handleLoadSite}
-							onChangeMapType={handleChangeMapType}
-							onNextRound={advanceRound}
-							status={status}
-							waypoints={waypoints}
-							onAddWaypoint={handleAddWaypoint}
-							onRemoveWaypoint={handleRemoveWaypoint}
-							onAutodesign={handleAutodesign}
-							autodesignRunning={autodesignRunning}
-							autodesignResult={autodesignResult}
-							roverSettings={roverSettings}
-							onRoverChange={handleRoverChange}
-							gameState={gameState}
-							gameStartPoint={gameStartPoint}
-							gameEndPoint={gameEndPoint}
-							onFinishPath={handleFinishPath}
-							simulating={simulating}
-						/>
+								onLoadSite={handleLoadSite}
+								onChangeMapType={handleChangeMapType}
+								onNextRound={advanceRound}
+								status={status}
+								waypoints={waypoints}
+								onAddWaypoint={handleAddWaypoint}
+								onRemoveWaypoint={handleRemoveWaypoint}
+								onAutodesign={handleAutodesign}
+								autodesignRunning={autodesignRunning}
+								autodesignResult={autodesignResult}
+								roverSettings={roverSettings}
+								onRoverChange={handleRoverChange}
+								gameState={gameState}
+								gameStartPoint={gameStartPoint}
+								gameEndPoint={gameEndPoint}
+								onFinishPath={handleFinishPath}
+								onStartGame={handleStartGame}
+								simulating={simulating}
+							/>
 				</div>
 			</div>
 			{showGameResult && currentRound && gameState && (
