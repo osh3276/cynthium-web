@@ -217,10 +217,9 @@ def get_site_map(site_name: str, map_type: str = "Elevation") -> dict | None:
 		data = elev
 		label = "Elevation"
 		png = _data_to_png(data, colormap=True)
-		# Downsample for 3D mesh
+		# 3D mesh at full resolution
 		h, w = data.shape
-		target = 200
-		stride = max(1, int(max(h, w) / target))
+		stride = 1
 		ds = data[::stride, ::stride].copy()
 		mask = np.isfinite(ds)
 		ds[~mask] = float(np.nanmin(ds[mask])) if np.any(np.isfinite(ds)) else 0
@@ -305,9 +304,8 @@ def get_site_map(site_name: str, map_type: str = "Elevation") -> dict | None:
 	# Always include terrain height data
 	elev = site_data.get("elevation")
 	if elev is not None:
-		h, w = elev.shape
-		target = 200
-		stride = max(1, int(max(h, w) / target))
+		# 3D mesh at full resolution
+		stride = 1
 		ds = elev[::stride, ::stride].copy()
 		mask = np.isfinite(ds)
 		fill_val = float(np.nanmin(ds[mask])) if np.any(mask) else 0.0
