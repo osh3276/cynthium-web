@@ -5,9 +5,15 @@ interface Props {
 	waypoints: Waypoint[];
 	onAddWaypoint: (wp: Waypoint) => void;
 	onRemoveWaypoint: (index: number) => void;
+	onClearWaypoints: () => void;
 }
 
-export default function PlanningPanel({ waypoints, onAddWaypoint, onRemoveWaypoint }: Props) {
+export default function PlanningPanel({
+	waypoints,
+	onAddWaypoint,
+	onRemoveWaypoint,
+	onClearWaypoints,
+}: Props) {
 	const coordRef = useRef<HTMLInputElement>(null);
 	const deleteIdxRef = useRef<HTMLInputElement>(null);
 
@@ -41,20 +47,48 @@ export default function PlanningPanel({ waypoints, onAddWaypoint, onRemoveWaypoi
 			<h3 className="panel-title">Planning</h3>
 
 			<label className="field-label">Coordinate:</label>
-			<input ref={coordRef} className="field-input" type="text" placeholder="x,y" />
+			<input
+				ref={coordRef}
+				className="field-input"
+				type="text"
+				placeholder="x,y"
+			/>
 
 			<button className="panel-button" onClick={handleAddCoord}>
 				Add waypoint
 			</button>
 
 			<label className="field-label">Waypoints:</label>
-			<textarea className="field-textarea" readOnly value={waypointLines} placeholder="" />
+			<textarea
+				className="field-textarea"
+				readOnly
+				value={waypointLines}
+				placeholder=""
+			/>
 
 			<div className="field-row">
 				<label className="field-label">Delete waypoint:</label>
-				<input ref={deleteIdxRef} className="field-input field-input-narrow" type="text" placeholder="Num" />
-				<button className="panel-button panel-button-sm" onClick={handleDelete}>Delete</button>
+				<input
+					ref={deleteIdxRef}
+					className="field-input field-input-narrow"
+					type="text"
+					placeholder="Num"
+				/>
+				<button
+					className="panel-button panel-button-sm"
+					onClick={handleDelete}
+				>
+					Delete
+				</button>
 			</div>
+
+			<button
+				className="panel-button panel-button-sm"
+				onClick={onClearWaypoints}
+				disabled={waypoints.length === 0}
+			>
+				Clear path
+			</button>
 		</div>
 	);
 }

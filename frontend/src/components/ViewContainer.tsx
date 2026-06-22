@@ -1,7 +1,12 @@
 import { useCallback, useRef, useState } from "react";
 import MapView from "./MapView";
 import TerrainView from "./TerrainView";
-import type { MapPayload, Waypoint, AutodesignResult, SimulationStats } from "../types";
+import type {
+	MapPayload,
+	Waypoint,
+	AutodesignResult,
+	SimulationStats,
+} from "../types";
 import type { LoadStatus } from "../App";
 
 interface Props {
@@ -14,9 +19,21 @@ interface Props {
 	gameEndPoint?: Waypoint | null;
 	manualStats: SimulationStats | null;
 	autoStats: SimulationStats | null;
+	onAnimationsComplete?: () => void;
 }
 
-export default function ViewContainer({ mapData, status, waypoints, autodesignResult, onAddWaypoint, gameStartPoint, gameEndPoint, manualStats, autoStats }: Props) {
+export default function ViewContainer({
+	mapData,
+	status,
+	waypoints,
+	autodesignResult,
+	onAddWaypoint,
+	gameStartPoint,
+	gameEndPoint,
+	manualStats,
+	autoStats,
+	onAnimationsComplete,
+}: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [splitPos, setSplitPos] = useState(50);
 
@@ -29,7 +46,10 @@ export default function ViewContainer({ mapData, status, waypoints, autodesignRe
 				const rect = containerRef.current?.getBoundingClientRect();
 				if (!rect) return;
 				const dx = me.clientX - startX;
-				const pct = Math.max(10, Math.min(90, startPos + (dx / rect.width) * 100));
+				const pct = Math.max(
+					10,
+					Math.min(90, startPos + (dx / rect.width) * 100),
+				);
 				setSplitPos(pct);
 			};
 			const onUp = () => {
@@ -45,11 +65,29 @@ export default function ViewContainer({ mapData, status, waypoints, autodesignRe
 	return (
 		<div ref={containerRef} className="view-container">
 			<div className="view-pane" style={{ width: `${splitPos}%` }}>
-				<MapView mapData={mapData} status={status} waypoints={waypoints} autodesignResult={autodesignResult} onAddWaypoint={onAddWaypoint} gameStartPoint={gameStartPoint} gameEndPoint={gameEndPoint} manualStats={manualStats} autoStats={autoStats} />
+				<MapView
+					mapData={mapData}
+					status={status}
+					waypoints={waypoints}
+					autodesignResult={autodesignResult}
+					onAddWaypoint={onAddWaypoint}
+					gameStartPoint={gameStartPoint}
+					gameEndPoint={gameEndPoint}
+					manualStats={manualStats}
+					autoStats={autoStats}
+					onAnimationsComplete={onAnimationsComplete}
+				/>
 			</div>
 			<div className="view-handle" onMouseDown={handleMouseDown} />
 			<div className="view-pane" style={{ width: `${100 - splitPos}%` }}>
-				<TerrainView mapData={mapData} status={status} waypoints={waypoints} autodesignResult={autodesignResult} manualStats={manualStats} autoStats={autoStats} />
+				<TerrainView
+					mapData={mapData}
+					status={status}
+					waypoints={waypoints}
+					autodesignResult={autodesignResult}
+					manualStats={manualStats}
+					autoStats={autoStats}
+				/>
 			</div>
 		</div>
 	);

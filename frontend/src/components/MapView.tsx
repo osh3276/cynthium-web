@@ -1,7 +1,22 @@
-import { useEffect, useRef, useState, useCallback, useLayoutEffect } from "react";
+import {
+	useEffect,
+	useRef,
+	useState,
+	useCallback,
+	useLayoutEffect,
+} from "react";
 import { type ReactElement } from "react";
-import type { MapPayload, Waypoint, AutodesignResult, SimulationStats } from "../types";
+import type {
+	MapPayload,
+	Waypoint,
+	AutodesignResult,
+	SimulationStats,
+} from "../types";
 import type { LoadStatus } from "../App";
+import { useRoverAnimation } from "./useRoverAnimation";
+
+/** Scale factor for animation speed (30x real-time so it's visible in a few seconds). */
+const ROVER_ANIMATION_SPEED = 30;
 
 interface Props {
 	mapData: MapPayload | null;
@@ -13,9 +28,21 @@ interface Props {
 	gameEndPoint?: Waypoint | null;
 	manualStats: SimulationStats | null;
 	autoStats: SimulationStats | null;
+	onAnimationsComplete?: () => void;
 }
 
-export default function MapView({ mapData, status, waypoints, autodesignResult, onAddWaypoint, gameStartPoint, gameEndPoint, manualStats, autoStats }: Props) {
+export default function MapView({
+	mapData,
+	status,
+	waypoints,
+	autodesignResult,
+	onAddWaypoint,
+	gameStartPoint,
+	gameEndPoint,
+	manualStats,
+	autoStats,
+	onAnimationsComplete,
+}: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const imgRef = useRef<HTMLImageElement | null>(null);
@@ -23,11 +50,11 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 	const [imgNatural, setImgNatural] = useState({ w: 1, h: 1 });
 	const [imgLoaded, setImgLoaded] = useState(false);
 
-	// Pan / zoom state — refs avoid re-renders during interaction
+	// Pan / zoom state - refs avoid re-renders during interaction
 	const pos = useRef({ x: 0, y: 0 });
 	const scale = useRef(1);
 
-	// Apply transform to DOM directly — no rAF, no React state
+	// Apply transform to DOM directly - no rAF, no React state
 	const applyTransform = useCallback(() => {
 		const el = contentRef.current;
 		if (!el) return;
@@ -59,7 +86,8 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 
 	// Reset & center transform when image loads
 	useLayoutEffect(() => {
-		if (!imgLoaded || !imgRef.current || !mapData || !containerRef.current) return;
+		if (!imgLoaded || !imgRef.current || !mapData || !containerRef.current)
+			return;
 		const cw = containerRef.current.clientWidth;
 		const ch = containerRef.current.clientHeight;
 		const iw = imgNatural.w;
@@ -68,7 +96,14 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 		scale.current = s;
 		pos.current = { x: (cw - iw * s) / 2, y: (ch - ih * s) / 2 };
 		applyTransform();
-	}, [mapData, status, imgLoaded, imgNatural.w, imgNatural.h, applyTransform]);
+	}, [
+		mapData,
+		status,
+		imgLoaded,
+		imgNatural.w,
+		imgNatural.h,
+		applyTransform,
+	]);
 
 	// Pointer interaction
 	const pointerActive = useRef(false);
@@ -103,21 +138,45 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 		return () => el.removeEventListener("wheel", onWheel);
 	}, [applyTransform]);
 
-	const screenToWorld = useCallback((clientX: number, clientY: number) => {
-		const rect = containerRef.current?.getBoundingClientRect();
-		if (!rect || !mapData) return null;
-		const wx = clientX - rect.left;
-		const wy = clientY - rect.top;
-		const { x, y } = pos.current;
-		const s = scale.current;
-		const imgX = (wx - x) / s;
-		const imgY = (wy - y) / s;
-		if (imgX < 0 || imgX > imgNatural.w || imgY < 0 || imgY > imgNatural.h) return null;
-		const b = mapData.bounds;
-		const worldX = b.left + (imgX / imgNatural.w) * (b.right - b.left);
-		const worldY = b.bottom + ((imgNatural.h - imgY) / imgNatural.h) * (b.top - b.bottom);
-		return { x: worldX, y: worldY };
-	}, [mapData, imgNatural]);
+	const screenToWorld = useCallback(
+		(clientX: number, clientY: number) => {
+			const rect = containerRef.current?.getBoundingClientRect();
+			if (!rect || !mapData) return null;
+			const wx = clientX - rect.left;
+			const wy = clientY - rect.top;
+			const { x, y } = pos.current;
+			const s = scale.current;
+			const imgX = (wx - x) / s;
+			const imgY = (wy - y) / s;
+			if (
+				imgX < 0 ||
+				imgX > imgNatural.w ||
+				imgY < 0 ||
+				imgY > imgNatural.h
+			)
+				return null;
+			const b = mapData.bounds;
+			const worldX = b.left + (imgX / imgNatural.w) * (b.right - b.left);
+			const worldY =
+				b.bottom +
+				((imgNatural.h - imgY) / imgNatural.h) * (b.top - b.bottom);
+			return { x: worldX, y: worldY };
+		},
+		[mapData, imgNatural],
+	);
+
+	const worldToPixel = useCallback(
+		(worldX: number, worldY: number) => {
+			if (!mapData) return null;
+			const b = mapData.bounds;
+			const ix = ((worldX - b.left) / (b.right - b.left)) * imgNatural.w;
+			const iy =
+				imgNatural.h -
+				((worldY - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
+			return { x: ix, y: iy };
+		},
+		[mapData, imgNatural],
+	);
 
 	const onPointerDown = useCallback((e: React.PointerEvent) => {
 		pointerActive.current = true;
@@ -128,34 +187,40 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 		(e.target as HTMLElement).setPointerCapture(e.pointerId);
 	}, []);
 
-	const onPointerMove = useCallback((e: React.PointerEvent) => {
-		if (!pointerActive.current) return;
-		const dx = e.clientX - panStart.current.x;
-		const dy = e.clientY - panStart.current.y;
-		if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
-			panning.current = true;
-		}
-		if (!panning.current) return;
-		pos.current.x += dx;
-		pos.current.y += dy;
-		panStart.current = { x: e.clientX, y: e.clientY };
-		applyTransform();
-	}, [applyTransform]);
-
-	const onPointerUp = useCallback((e: React.PointerEvent) => {
-		pointerActive.current = false;
-		(e.target as HTMLElement).releasePointerCapture(e.pointerId);
-
-		if (!panning.current) {
-			const dx = Math.abs(e.clientX - pointerDownPos.current.x);
-			const dy = Math.abs(e.clientY - pointerDownPos.current.y);
-			const dt = Date.now() - pointerDownTime.current;
-			if (dx < 5 && dy < 5 && dt < 300) {
-				const wp = screenToWorld(e.clientX, e.clientY);
-				if (wp) onAddWaypoint(wp);
+	const onPointerMove = useCallback(
+		(e: React.PointerEvent) => {
+			if (!pointerActive.current) return;
+			const dx = e.clientX - panStart.current.x;
+			const dy = e.clientY - panStart.current.y;
+			if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+				panning.current = true;
 			}
-		}
-	}, [screenToWorld, onAddWaypoint]);
+			if (!panning.current) return;
+			pos.current.x += dx;
+			pos.current.y += dy;
+			panStart.current = { x: e.clientX, y: e.clientY };
+			applyTransform();
+		},
+		[applyTransform],
+	);
+
+	const onPointerUp = useCallback(
+		(e: React.PointerEvent) => {
+			pointerActive.current = false;
+			(e.target as HTMLElement).releasePointerCapture(e.pointerId);
+
+			if (!panning.current) {
+				const dx = Math.abs(e.clientX - pointerDownPos.current.x);
+				const dy = Math.abs(e.clientY - pointerDownPos.current.y);
+				const dt = Date.now() - pointerDownTime.current;
+				if (dx < 5 && dy < 5 && dt < 300) {
+					const wp = screenToWorld(e.clientX, e.clientY);
+					if (wp) onAddWaypoint(wp);
+				}
+			}
+		},
+		[screenToWorld, onAddWaypoint],
+	);
 
 	// Throttled overlay display
 	const [displayScale, setDisplayScale] = useState(1);
@@ -168,6 +233,57 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 		return () => clearInterval(id);
 	}, [waypoints.length]);
 
+	// Rover animation hook - animates along the manual path velocity profile
+	// Pass manualStats as restartKey so any new simulation response restarts
+	// the animation, even if the profile data is unchanged.
+	const roverAnim = useRoverAnimation(
+		manualStats?.path_velocity_profile,
+		worldToPixel,
+		ROVER_ANIMATION_SPEED,
+		manualStats,
+	);
+
+	// Rover animation for the auto-designed path
+	const autoRoverAnim = useRoverAnimation(
+		autoStats?.path_velocity_profile,
+		worldToPixel,
+		ROVER_ANIMATION_SPEED,
+		autoStats,
+	);
+
+	// Fire onAnimationsComplete when both rover animations finish
+	const animsDoneRef = useRef(false);
+	const animsStartedRef = useRef(false);
+	useEffect(() => {
+		// Only fire when there are actual stats to animate (game mode)
+		if (!manualStats && !autoStats) return;
+
+		const bothDone = roverAnim.done && autoRoverAnim.done;
+		const eitherStarted = !roverAnim.done || !autoRoverAnim.done;
+
+		// Track that at least one rover has actually started animating
+		// (their done state went true -> false). This prevents firing the
+		// callback on the initial render where done=true before the hook
+		// effects have had a chance to start the animation.
+		if (eitherStarted) {
+			animsStartedRef.current = true;
+		}
+
+		if (bothDone && animsStartedRef.current && !animsDoneRef.current) {
+			animsDoneRef.current = true;
+			onAnimationsComplete?.();
+		}
+		if (!bothDone) {
+			animsDoneRef.current = false;
+		}
+	}, [
+		roverAnim.done,
+		autoRoverAnim.done,
+		manualStats,
+		autoStats,
+		onAnimationsComplete,
+	]);
+
 	return (
 		<div
 			className="map-view"
@@ -178,15 +294,45 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 			style={{ touchAction: "none", cursor: "grab" }}
 		>
 			{status === "idle" && (
-				<div className="map-placeholder" style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-					<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+				<div
+					className="map-placeholder"
+					style={{
+						position: "absolute",
+						inset: 0,
+						display: "flex",
+						flexDirection: "column",
+						alignItems: "center",
+						justifyContent: "center",
+						pointerEvents: "none",
+					}}
+				>
+					<svg
+						width="48"
+						height="48"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						strokeWidth="1.5"
+						strokeLinecap="round"
+						strokeLinejoin="round"
+					>
 						<path d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
 					</svg>
 					<span>Select a site and generate map</span>
 				</div>
 			)}
 			{status === "loading" && (
-				<div className="map-placeholder" style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+				<div
+					className="map-placeholder"
+					style={{
+						position: "absolute",
+						inset: 0,
+						display: "flex",
+						alignItems: "center",
+						justifyContent: "center",
+						pointerEvents: "none",
+					}}
+				>
 					<span>Loading...</span>
 				</div>
 			)}
@@ -204,46 +350,120 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 						<img
 							src={imgSrc.current}
 							alt={mapData!.label}
-							style={{ display: "block", maxWidth: "none", userSelect: "none" }}
+							style={{
+								display: "block",
+								maxWidth: "none",
+								userSelect: "none",
+							}}
 							draggable={false}
 						/>
 						<svg
 							style={{
-								position: "absolute", top: 0, left: 0,
-								width: imgNatural.w, height: imgNatural.h,
+								position: "absolute",
+								top: 0,
+								left: 0,
+								width: imgNatural.w,
+								height: imgNatural.h,
 								pointerEvents: "none",
 							}}
 						>
-							{gameStartPoint && (() => {
-								const b = mapData!.bounds;
-								const ix = ((gameStartPoint.x - b.left) / (b.right - b.left)) * imgNatural.w;
-								const iy = imgNatural.h - ((gameStartPoint.y - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
-								return (
-									<g>
-										<rect x={ix - 8} y={iy - 8} width={16} height={16} fill="#4fc3f7" rx={2} />
-										<text x={ix} y={iy + 3} textAnchor="middle" fill="white" fontSize={9} fontWeight={700}>S</text>
-									</g>
-								);
-							})()}
-							{gameEndPoint && (() => {
-								const b = mapData!.bounds;
-								const ix = ((gameEndPoint.x - b.left) / (b.right - b.left)) * imgNatural.w;
-								const iy = imgNatural.h - ((gameEndPoint.y - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
-								return (
-									<g>
-										<rect x={ix - 8} y={iy - 8} width={16} height={16} fill="#e53935" rx={2} />
-										<text x={ix} y={iy + 3} textAnchor="middle" fill="white" fontSize={9} fontWeight={700}>E</text>
-									</g>
-								);
-							})()}
+							{gameStartPoint &&
+								(() => {
+									const b = mapData!.bounds;
+									const ix =
+										((gameStartPoint.x - b.left) /
+											(b.right - b.left)) *
+										imgNatural.w;
+									const iy =
+										imgNatural.h -
+										((gameStartPoint.y - b.bottom) /
+											(b.top - b.bottom)) *
+											imgNatural.h;
+									return (
+										<g>
+											<rect
+												x={ix - 8}
+												y={iy - 8}
+												width={16}
+												height={16}
+												fill="#4fc3f7"
+												rx={2}
+											/>
+											<text
+												x={ix}
+												y={iy + 3}
+												textAnchor="middle"
+												fill="white"
+												fontSize={9}
+												fontWeight={700}
+											>
+												S
+											</text>
+										</g>
+									);
+								})()}
+							{gameEndPoint &&
+								(() => {
+									const b = mapData!.bounds;
+									const ix =
+										((gameEndPoint.x - b.left) /
+											(b.right - b.left)) *
+										imgNatural.w;
+									const iy =
+										imgNatural.h -
+										((gameEndPoint.y - b.bottom) /
+											(b.top - b.bottom)) *
+											imgNatural.h;
+									return (
+										<g>
+											<rect
+												x={ix - 8}
+												y={iy - 8}
+												width={16}
+												height={16}
+												fill="#e53935"
+												rx={2}
+											/>
+											<text
+												x={ix}
+												y={iy + 3}
+												textAnchor="middle"
+												fill="white"
+												fontSize={9}
+												fontWeight={700}
+											>
+												E
+											</text>
+										</g>
+									);
+								})()}
 							{waypoints.map((wp, i) => {
 								const b = mapData!.bounds;
-								const ix = ((wp.x - b.left) / (b.right - b.left)) * imgNatural.w;
-								const iy = imgNatural.h - ((wp.y - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
+								const ix =
+									((wp.x - b.left) / (b.right - b.left)) *
+									imgNatural.w;
+								const iy =
+									imgNatural.h -
+									((wp.y - b.bottom) / (b.top - b.bottom)) *
+										imgNatural.h;
 								return (
 									<g key={i}>
-										<circle cx={ix} cy={iy} r={4} fill="white" stroke="black" strokeWidth={1.2} />
-										<text x={ix + 6} y={iy + 2} fill="white" fontSize={9} stroke="black" strokeWidth={0.3}>
+										<circle
+											cx={ix}
+											cy={iy}
+											r={4}
+											fill="white"
+											stroke="black"
+											strokeWidth={1.2}
+										/>
+										<text
+											x={ix + 6}
+											y={iy + 2}
+											fill="white"
+											fontSize={9}
+											stroke="black"
+											strokeWidth={0.3}
+										>
 											{i + 1}
 										</text>
 									</g>
@@ -255,71 +475,220 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 									stroke="white"
 									strokeWidth={2}
 									strokeDasharray="6,3"
-									points={waypoints.map((wp) => {
-										const b = mapData!.bounds;
-										const ix = ((wp.x - b.left) / (b.right - b.left)) * imgNatural.w;
-										const iy = imgNatural.h - ((wp.y - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
-										return `${ix},${iy}`;
-									}).join(" ")}
+									points={waypoints
+										.map((wp) => {
+											const b = mapData!.bounds;
+											const ix =
+												((wp.x - b.left) /
+													(b.right - b.left)) *
+												imgNatural.w;
+											const iy =
+												imgNatural.h -
+												((wp.y - b.bottom) /
+													(b.top - b.bottom)) *
+													imgNatural.h;
+											return `${ix},${iy}`;
+										})
+										.join(" ")}
 								/>
 							)}
-							{autodesignResult && autodesignResult.path_xy.length > 1 && (() => {
-								const b = mapData!.bounds;
-								let autoPts = autodesignResult.path_xy;
-								const failArr = autoStats?.failure_xy;
+							{autodesignResult &&
+								autodesignResult.path_xy.length > 1 &&
+								(() => {
+									const b = mapData!.bounds;
+									let autoPts = autodesignResult.path_xy;
+									const failArr = autoStats?.failure_xy;
 
-								if (failArr && Array.isArray(failArr) && failArr.length >= 2) {
-									const fx = failArr[0] as number;
-									const fy = failArr[1] as number;
-									let cutIdx = autoPts.length - 1;
-									let minDist = Infinity;
-									for (let i = 0; i < autoPts.length - 1; i++) {
-										const a = autoPts[i];
-										const b2 = autoPts[i + 1];
-										const dx = b2[0] - a[0];
-										const dy = b2[1] - a[1];
-										const lenSq = dx * dx + dy * dy;
-										let t = 0;
-										if (lenSq > 0) {
-											t = ((fx - a[0]) * dx + (fy - a[1]) * dy) / lenSq;
-											t = Math.max(0, Math.min(1, t));
+									if (
+										failArr &&
+										Array.isArray(failArr) &&
+										failArr.length >= 2
+									) {
+										const fx = failArr[0] as number;
+										const fy = failArr[1] as number;
+										let cutIdx = autoPts.length - 1;
+										let minDist = Infinity;
+										for (
+											let i = 0;
+											i < autoPts.length - 1;
+											i++
+										) {
+											const a = autoPts[i];
+											const b2 = autoPts[i + 1];
+											const dx = b2[0] - a[0];
+											const dy = b2[1] - a[1];
+											const lenSq = dx * dx + dy * dy;
+											let t = 0;
+											if (lenSq > 0) {
+												t =
+													((fx - a[0]) * dx +
+														(fy - a[1]) * dy) /
+													lenSq;
+												t = Math.max(0, Math.min(1, t));
+											}
+											const cx = a[0] + t * dx;
+											const cy = a[1] + t * dy;
+											const rx = fx - cx;
+											const ry = fy - cy;
+											const d = rx * rx + ry * ry;
+											if (d < minDist) {
+												minDist = d;
+												cutIdx = i;
+											}
 										}
-										const cx = a[0] + t * dx;
-										const cy = a[1] + t * dy;
-										const rx = fx - cx;
-										const ry = fy - cy;
-										const d = rx * rx + ry * ry;
-										if (d < minDist) {
-											minDist = d;
-											cutIdx = i;
-										}
+										autoPts = autoPts.slice(0, cutIdx + 1);
+										autoPts.push([fx, fy]);
 									}
-									autoPts = autoPts.slice(0, cutIdx + 1);
-									autoPts.push([fx, fy]);
-								}
 
-								return (
-									<polyline
-										fill="none"
-										stroke="#4fc3f7"
-										strokeWidth={2}
-										points={autoPts.map((p) => {
-											const ix = ((p[0] - b.left) / (b.right - b.left)) * imgNatural.w;
-											const iy = imgNatural.h - ((p[1] - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
-											return `${ix},${iy}`;
-										}).join(" ")}
+									return (
+										<polyline
+											fill="none"
+											stroke="#4fc3f7"
+											strokeWidth={2}
+											points={autoPts
+												.map((p) => {
+													const ix =
+														((p[0] - b.left) /
+															(b.right -
+																b.left)) *
+														imgNatural.w;
+													const iy =
+														imgNatural.h -
+														((p[1] - b.bottom) /
+															(b.top -
+																b.bottom)) *
+															imgNatural.h;
+													return `${ix},${iy}`;
+												})
+												.join(" ")}
+										/>
+									);
+								})()}
+
+							{/* Failure indicators - show red X only after animation completes */}
+							{/* Manual failure marker: only after animation finishes (failed) */}
+							{roverAnim.done &&
+								roverAnim.failed &&
+								_renderFailureMarker(
+									manualStats,
+									mapData!,
+									imgNatural,
+								)}
+							{/* Auto failure marker: only after auto animation finishes */}
+							{autoRoverAnim.done &&
+								autoRoverAnim.failed &&
+								_renderFailureMarker(
+									autoStats,
+									mapData!,
+									imgNatural,
+								)}
+
+							{/* Animated rover dot - manual (cyan) */}
+							{roverAnim.pos && !roverAnim.done && (
+								<g>
+									{/* Glow */}
+									<circle
+										cx={roverAnim.pos.x}
+										cy={roverAnim.pos.y}
+										r={9}
+										fill={
+											roverAnim.failed
+												? "rgba(255,23,68,0.3)"
+												: "rgba(79,195,247,0.3)"
+										}
 									/>
-								);
-							})()}
+									{/* Core dot */}
+									<circle
+										cx={roverAnim.pos.x}
+										cy={roverAnim.pos.y}
+										r={5}
+										fill={
+											roverAnim.failed
+												? "#ff1744"
+												: "#4fc3f7"
+										}
+										stroke={
+											roverAnim.failed
+												? "#b71c1c"
+												: "#0288d1"
+										}
+										strokeWidth={1.5}
+									/>
+								</g>
+							)}
 
-							{/* Failure indicators — show red X at failure_xy if present */}
-							{_renderFailureMarker(manualStats, mapData!, imgNatural)}
-							{_renderFailureMarker(autoStats, mapData!, imgNatural)}
+							{/* Animated rover dot - auto (orange) */}
+							{autoRoverAnim.pos && !autoRoverAnim.done && (
+								<g>
+									{/* Glow */}
+									<circle
+										cx={autoRoverAnim.pos.x}
+										cy={autoRoverAnim.pos.y}
+										r={9}
+										fill={
+											autoRoverAnim.failed
+												? "rgba(255,23,68,0.3)"
+												: "rgba(255,167,38,0.3)"
+										}
+									/>
+									{/* Core dot */}
+									<circle
+										cx={autoRoverAnim.pos.x}
+										cy={autoRoverAnim.pos.y}
+										r={5}
+										fill={
+											autoRoverAnim.failed
+												? "#ff1744"
+												: "#ffa726"
+										}
+										stroke={
+											autoRoverAnim.failed
+												? "#b71c1c"
+												: "#e65100"
+										}
+										strokeWidth={1.5}
+									/>
+								</g>
+							)}
 						</svg>
 					</div>
 					{mapData && (
-						<div className="view-overlay top-left" style={{ zIndex: 20 }}>
-							{mapData.label} ({mapData.value_range[0].toFixed(1)} – {mapData.value_range[1].toFixed(1)}) · {displayScale.toFixed(1)}x · {displayWpCount} pts
+						<div
+							className="view-overlay top-left"
+							style={{ zIndex: 20 }}
+						>
+							{mapData.label} ({mapData.value_range[0].toFixed(1)}{" "}
+							- {mapData.value_range[1].toFixed(1)}) ·{" "}
+							{displayScale.toFixed(1)}x · {displayWpCount} pts
+						</div>
+					)}
+					{/* Velocity overlays */}
+					{roverAnim.pos && !roverAnim.done && (
+						<div
+							className="view-overlay top-right"
+							style={{
+								zIndex: 20,
+								fontSize: 11,
+								color: roverAnim.failed ? "#ff1744" : "#4fc3f7",
+							}}
+						>
+							Manual: {roverAnim.velocity.toFixed(2)} m/s
+							{roverAnim.failed && " - FAILED"}
+						</div>
+					)}
+					{autoRoverAnim.pos && !autoRoverAnim.done && (
+						<div
+							className="view-overlay top-right"
+							style={{
+								zIndex: 20,
+								fontSize: 11,
+								color: autoRoverAnim.failed
+									? "#ff1744"
+									: "#ffa726",
+							}}
+						>
+							Auto: {autoRoverAnim.velocity.toFixed(2)} m/s
+							{autoRoverAnim.failed && " - FAILED"}
 						</div>
 					)}
 				</>
@@ -328,19 +697,45 @@ export default function MapView({ mapData, status, waypoints, autodesignResult, 
 	);
 }
 
-function _renderFailureMarker(stats: SimulationStats | null, mapData: MapPayload, imgNatural: { w: number; h: number }): ReactElement | null {
+function _renderFailureMarker(
+	stats: SimulationStats | null,
+	mapData: MapPayload,
+	imgNatural: { w: number; h: number },
+): ReactElement | null {
 	const arr = stats?.failure_xy;
 	if (!arr || !Array.isArray(arr) || arr.length < 2) return null;
 	const fx = arr[0] as number;
 	const fy = arr[1] as number;
 	const b = mapData.bounds;
 	const ix = ((fx - b.left) / (b.right - b.left)) * imgNatural.w;
-	const iy = imgNatural.h - ((fy - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
+	const iy =
+		imgNatural.h - ((fy - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
 	return (
 		<g>
-			<circle cx={ix} cy={iy} r={10} fill="none" stroke="#ff1744" strokeWidth={3} />
-			<line x1={ix - 6} y1={iy - 6} x2={ix + 6} y2={iy + 6} stroke="#ff1744" strokeWidth={3} />
-			<line x1={ix - 6} y1={iy + 6} x2={ix + 6} y2={iy - 6} stroke="#ff1744" strokeWidth={3} />
+			<circle
+				cx={ix}
+				cy={iy}
+				r={5}
+				fill="none"
+				stroke="#ff1744"
+				strokeWidth={2}
+			/>
+			<line
+				x1={ix - 4}
+				y1={iy - 4}
+				x2={ix + 4}
+				y2={iy + 4}
+				stroke="#ff1744"
+				strokeWidth={2}
+			/>
+			<line
+				x1={ix - 4}
+				y1={iy + 4}
+				x2={ix + 4}
+				y2={iy - 4}
+				stroke="#ff1744"
+				strokeWidth={2}
+			/>
 		</g>
 	);
 }
