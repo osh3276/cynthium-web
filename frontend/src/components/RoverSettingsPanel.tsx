@@ -10,6 +10,7 @@ interface Props {
 const PRESETS: Record<string, RoverSettings> = {
 	Custom: { mass_kg: 150, power_hp: 0.2, wheel_friction_coeff: 0.6, rolling_resistance_coeff: 0.1 },
 	"Apollo LRV": { mass_kg: 210, power_hp: 1.0, wheel_friction_coeff: 0.6, rolling_resistance_coeff: 0.021 },
+	"Artemis SR": { mass_kg: 530, power_hp: 0.72, wheel_friction_coeff: 0.7, rolling_resistance_coeff: 0.15 },
 };
 
 export default function RoverSettingsPanel({ settings, onChange, readOnly }: Props) {
