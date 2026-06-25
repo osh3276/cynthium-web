@@ -711,6 +711,14 @@ function App() {
 
 	return (
 		<div className="app-layout">
+			<header className="app-header">
+				<div className="header-brand">
+					<span className="header-title">CYNTHIUM</span>
+					<span className="header-version">v1.0.0</span>
+				</div>
+				<div className="header-tagline">Lunar Route Planning System</div>
+				<div className="header-glow" />
+			</header>
 			<div className="main-content">
 				<div className="left-pane">
 					<div className="view-area">

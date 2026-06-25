@@ -72,6 +72,74 @@ body {
 		var(--bg);
 }
 
+/* ===== App Header ===== */
+.app-header {
+	display: flex;
+	align-items: center;
+	height: 36px;
+	flex-shrink: 0;
+	padding: 0 16px;
+	background: linear-gradient(180deg, rgba(0, 212, 255, 0.04), transparent);
+	border-bottom: 1px solid var(--border);
+	position: relative;
+	overflow: hidden;
+}
+
+.app-header::after {
+	content: "";
+	position: absolute;
+	bottom: -1px;
+	left: 0;
+	right: 0;
+	height: 1px;
+	background: linear-gradient(90deg, transparent, var(--accent), transparent);
+	opacity: 0.4;
+}
+
+.header-brand {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+}
+
+.header-title {
+	font-size: 24px;
+	font-weight: 700;
+	font-style: italic;
+	color: var(--accent);
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	text-shadow: 0 0 24px rgba(0, 212, 255, 0.3), 0 0 60px rgba(0, 212, 255, 0.1);
+}
+
+.header-version {
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--text-dim);
+	font-family: var(--font-mono);
+	letter-spacing: 1px;
+}
+
+.header-tagline {
+	font-size: 10px;
+	font-weight: 500;
+	color: var(--text-dim);
+	letter-spacing: 1.5px;
+	text-transform: uppercase;
+	opacity: 0.6;
+	margin-left: auto;
+}
+
+.header-glow {
+	position: absolute;
+	top: -20px;
+	left: 30%;
+	width: 40%;
+	height: 40px;
+	background: radial-gradient(ellipse, rgba(0, 212, 255, 0.06) 0%, transparent 70%);
+	pointer-events: none;
+}
+
 /* ===== Main Content ===== */
 .main-content {
 	flex: 1;
@@ -408,25 +476,29 @@ body {
 /* scrollbar */
 .sidebar::-webkit-scrollbar,
 .inner-tab-content::-webkit-scrollbar,
-.results-scroll::-webkit-scrollbar {
+.results-scroll::-webkit-scrollbar,
+.field-textarea::-webkit-scrollbar {
 	width: 6px;
 }
 
 .sidebar::-webkit-scrollbar-track,
 .inner-tab-content::-webkit-scrollbar-track,
-.results-scroll::-webkit-scrollbar-track {
+.results-scroll::-webkit-scrollbar-track,
+.field-textarea::-webkit-scrollbar-track {
 	background: var(--scrollbar-bg);
 }
 
 .sidebar::-webkit-scrollbar-thumb,
 .inner-tab-content::-webkit-scrollbar-thumb,
-.results-scroll::-webkit-scrollbar-thumb {
+.results-scroll::-webkit-scrollbar-thumb,
+.field-textarea::-webkit-scrollbar-thumb {
 	background: var(--scrollbar-thumb);
 }
 
 .sidebar::-webkit-scrollbar-thumb:hover,
 .inner-tab-content::-webkit-scrollbar-thumb:hover,
-.results-scroll::-webkit-scrollbar-thumb:hover {
+.results-scroll::-webkit-scrollbar-thumb:hover,
+.field-textarea::-webkit-scrollbar-thumb:hover {
 	background: var(--scrollbar-thumb-hover);
 }
 
@@ -528,7 +600,7 @@ select.field-input option {
 	color: var(--input-text);
 	font-size: 12px;
 	font-family: var(--font-mono);
-	resize: none;
+	resize: vertical;
 }
 
 .field-textarea:focus {
