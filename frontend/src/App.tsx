@@ -626,18 +626,39 @@ function App() {
 			round.userStats = userStats;
 			const userFeasible =
 				(userStats["traverse_feasible"] as number) >= 0.5;
-			round.userScore = userFeasible
-				? (userStats["traversal_score"] as number) || 0
-				: 0;
-			setManualStats(userStats);
-
-			// 2. Use pre-calculated autopath (computed during round loading)
 			const autoStats: SimulationStats = round.autoStats || {};
 			const autoFeasible =
 				(autoStats["traverse_feasible"] as number) >= 0.5;
-			round.autoScore = autoFeasible
-				? (autoStats["traversal_score"] as number) || 0
-				: 0;
+
+			// When both paths fail, grade by distance from endzone
+			const bothFailed = !userFeasible && !autoFeasible;
+			if (bothFailed) {
+				const failDistScore = (
+					stats: SimulationStats | null,
+					start: Waypoint,
+					end: Waypoint,
+				): number => {
+					const fxy = stats?.failure_xy;
+					if (!fxy) return 0;
+					const totalDist = Math.hypot(end.x - start.x, end.y - start.y);
+					if (totalDist <= 0) return 0;
+					const distToEnd = Math.hypot(fxy[0] - end.x, fxy[1] - end.y);
+					const progress = 1 - Math.min(distToEnd / totalDist, 1);
+					return Math.round(progress * 1000);
+				};
+				round.userScore = failDistScore(userStats, round.startPoint, round.endPoint);
+				round.autoScore = failDistScore(autoStats, round.startPoint, round.endPoint);
+			} else {
+				round.userScore = userFeasible
+					? (userStats["traversal_score"] as number) || 0
+					: 0;
+				round.autoScore = autoFeasible
+					? (autoStats["traversal_score"] as number) || 0
+					: 0;
+			}
+			setManualStats(userStats);
+
+			// 2. Use pre-calculated autopath (computed during round loading)
 			setAutoStats(Object.keys(autoStats).length > 0 ? autoStats : null);
 
 			// Reveal auto path on the map now
@@ -678,11 +699,11 @@ function App() {
 
 	// Show game result dialog after rover animations finish
 	const handleAnimationsComplete = useCallback(() => {
-		if (pendingGameResult) {
-			setPendingGameResult(false);
-			setShowGameResult(true);
-		}
-	}, [pendingGameResult]);
+			if (pendingGameResult) {
+				setPendingGameResult(false);
+				setTimeout(() => setShowGameResult(true), 1000);
+			}
+		}, [pendingGameResult]);
 
 	const currentRound = gameState
 		? gameState.rounds[gameState.currentRound]

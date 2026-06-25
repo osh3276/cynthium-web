@@ -118,6 +118,7 @@ function formatStat(stats: SimulationStats | null, key: string): string {
 function formatTime(stats: SimulationStats | null): string {
 	const v = stats?.["traversal_time_s"];
 	if (v == null || typeof v !== "number" || !isFinite(v) || v <= 0) return "-";
+	if (v > 1e9) return "infinite";
 	if (v >= 86400) return (v / 86400).toFixed(1) + " days";
 	if (v >= 3600) return (v / 3600).toFixed(1) + " hr";
 	if (v >= 60) return (v / 60).toFixed(1) + " min";
