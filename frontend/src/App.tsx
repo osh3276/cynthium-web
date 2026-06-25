@@ -34,7 +34,7 @@ function showError(err: unknown) {
 const CURIOSITY: RoverSettings = {
 	mass_kg: 899.0,
 	power_hp: 0.13,
-	wheel_friction_coeff: 0.35,
+	wheel_friction_coeff: 0.5,
 	rolling_resistance_coeff: 0.02,
 };
 

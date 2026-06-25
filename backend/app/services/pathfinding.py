@@ -63,10 +63,18 @@ def _dijkstra(
     goal_rc: tuple[int, int],
     traversable: np.ndarray,
     cell_cost: np.ndarray,
+    elev: np.ndarray,
     res_x: float,
     res_y: float,
+    max_slope_deg: float = 20.0,
+    slope_weight: float = 1.0,
+    grade_power: float = 2.0,
 ) -> dict | None:
-    """A* with 16-directional movement and admissible straight-line heuristic."""
+    """A* with 16-directional movement — matches original cynthium implementation.
+
+    Base cost from cell_cost (sun, meteor), plus grade penalty from elevation
+    differences (uphill only, exponential grade_power).
+    """
     import heapq
 
     H, W = traversable.shape
@@ -136,6 +144,17 @@ def _dijkstra(
             step = math.hypot(float(dc) * res_x, float(dr) * res_y)
             avg_cost = 0.5 * (float(cell_cost[r, c]) + float(cell_cost[nr, nc]))
             cand = g_val + step * avg_cost
+
+            # Grade penalty from elevation (uphill only, exponential — matches original)
+            if step > 1e-9:
+                e0 = float(elev[r, c])
+                e1 = float(elev[nr, nc])
+                if math.isfinite(e0) and math.isfinite(e1):
+                    dz = e1 - e0
+                    if dz > 0 and max_slope_deg > 0:
+                        g = float(math.degrees(math.atan2(dz, step)))
+                        grade_norm = min(1.0, g / max_slope_deg)
+                        cand += float(slope_weight) * (grade_norm ** float(grade_power)) * step
 
             if cand < g_cost[nr, nc]:
                 g_cost[nr, nc] = cand
@@ -515,17 +534,6 @@ def _compute_segment(
             if 0 <= rr_local < nrows and 0 <= cc_local < ncols:
                 traversable[rr_local, cc_local] = False
 
-	cell_cost = (
-		1.0
-		+ (float(max(0.0, slope_weight)) * slope_norm)
-		+ (float(max(0.0, sun_weight)) * (1.0 - illum_norm))
-		+ (float(max(0.0, meteor_weight)) * meteor_norm)
-	).astype(np.float32)
-	cell_cost = np.asarray(cell_cost)
-	cell_cost = np.clip(cell_cost, 0.01, np.inf).astype(np.float32)
-	bad = ~np.isfinite(elev_win) | ~np.isfinite(slope)
-	cell_cost[bad] = 1e6
-
     illum_crop = np.asarray(illum_crop)
     illum_norm = np.full_like(illum_crop, 0.5, dtype=np.float32)
     finite_illum = np.asarray(illum_crop[np.isfinite(illum_crop)])
@@ -539,7 +547,6 @@ def _compute_segment(
 
     cell_cost = (
         1.0
-        + (float(max(0.0, slope_weight)) * np.square(slope_norm))
         + (float(max(0.0, sun_weight)) * np.square(1.0 - illum_norm))
         + (float(max(0.0, meteor_weight)) * np.square(meteor_norm))
     ).astype(np.float32)
@@ -576,8 +583,12 @@ def _compute_segment(
         goal_rc=goal_local,
         traversable=traversable,
         cell_cost=cell_cost,
+        elev=elev_win,
         res_x=res_x,
         res_y=res_y,
+        max_slope_deg=max_slope_deg,
+        slope_weight=slope_weight,
+        grade_power=2.0,
     )
     if result is None or not result.get("path_rc"):
         return None, "no path found"
