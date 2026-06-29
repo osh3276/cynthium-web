@@ -557,7 +557,7 @@ export default function MapView({
 														((p[1] - b.bottom) /
 															(b.top -
 																b.bottom)) *
-															imgNatural.h;
+														imgNatural.h;
 													return `${ix},${iy}`;
 												})
 												.join(" ")}
@@ -565,23 +565,9 @@ export default function MapView({
 									);
 								})()}
 
-							{/* Failure indicators - show red X only after animation completes */}
-							{/* Manual failure marker: only after animation finishes (failed) */}
-							{roverAnim.done &&
-								roverAnim.failed &&
-								_renderFailureMarker(
-									manualStats,
-									mapData!,
-									imgNatural,
-								)}
-							{/* Auto failure marker: only after auto animation finishes */}
-							{autoRoverAnim.done &&
-								autoRoverAnim.failed &&
-								_renderFailureMarker(
-									autoStats,
-									mapData!,
-									imgNatural,
-								)}
+							{/* Failure indicators — show red X at failure_xy if present */}
+							{_renderFailureMarker(manualStats, mapData!, imgNatural)}
+							{_renderFailureMarker(autoStats, mapData!, imgNatural)}
 
 							{/* Animated rover dot - manual (cyan) */}
 							{roverAnim.pos && !roverAnim.done && (
@@ -678,8 +664,10 @@ export default function MapView({
 					)}
 					{autoRoverAnim.pos && !autoRoverAnim.done && (
 						<div
-							className="view-overlay top-right"
+							className="view-overlay"
 							style={{
+								top: 32,
+								right: 8,
 								zIndex: 20,
 								fontSize: 11,
 								color: autoRoverAnim.failed
