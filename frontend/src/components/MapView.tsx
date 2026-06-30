@@ -251,14 +251,15 @@ export default function MapView({
 		autoStats,
 	);
 
-	// Fire onAnimationsComplete when both rover animations finish
+	// Fire onAnimationsComplete when the manual rover animation finishes
+	// (auto animation plays alongside but doesn't block the result dialog)
 	const animsDoneRef = useRef(false);
 	const animsStartedRef = useRef(false);
 	useEffect(() => {
 		// Only fire when there are actual stats to animate (game mode)
 		if (!manualStats && !autoStats) return;
 
-		const bothDone = roverAnim.done && autoRoverAnim.done;
+		const manualDone = roverAnim.done;
 		const eitherStarted = !roverAnim.done || !autoRoverAnim.done;
 
 		// Track that at least one rover has actually started animating
@@ -269,16 +270,15 @@ export default function MapView({
 			animsStartedRef.current = true;
 		}
 
-		if (bothDone && animsStartedRef.current && !animsDoneRef.current) {
+		if (manualDone && animsStartedRef.current && !animsDoneRef.current) {
 			animsDoneRef.current = true;
 			onAnimationsComplete?.();
 		}
-		if (!bothDone) {
+		if (!manualDone) {
 			animsDoneRef.current = false;
 		}
 	}, [
 		roverAnim.done,
-		autoRoverAnim.done,
 		manualStats,
 		autoStats,
 		onAnimationsComplete,

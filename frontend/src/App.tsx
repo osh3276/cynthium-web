@@ -145,6 +145,7 @@ function App() {
 	const [resultsHeight, setResultsHeight] = useState(200);
 	const resizeRef = useRef<boolean>(false);
 	const loadedSiteRef = useRef("");
+	const mapTypeRef = useRef("Elevation");
 
 	// Game state
 	const [gameState, setGameState] = useState<GameState | null>(null);
@@ -198,17 +199,23 @@ function App() {
 
 	const handleChangeMapType = useCallback(
 		(mapType: string, date: string) => {
-			if (currentSite) {
+			mapTypeRef.current = mapType;
+			if (currentSite && !pendingGameResult) {
 				loadSiteMap(currentSite, mapType, date);
 			}
 		},
-		[loadSiteMap, currentSite],
+		[loadSiteMap, currentSite, pendingGameResult],
 	);
 
-	const handleAddWaypoint = useCallback((wp: Waypoint) => {
-		setWaypoints((prev) => [...prev, wp]);
-		setAutodesignResult(null);
-	}, []);
+	const handleAddWaypoint = useCallback(
+		(wp: Waypoint) => {
+			// Don't add waypoints during game result animation or dialog
+			if (pendingGameResult || showGameResult) return;
+			setWaypoints((prev) => [...prev, wp]);
+			setAutodesignResult(null);
+		},
+		[pendingGameResult, showGameResult],
+	);
 
 	const handleRemoveWaypoint = useCallback((index: number) => {
 		setWaypoints((prev) => prev.filter((_, i) => i !== index));
@@ -398,6 +405,26 @@ function App() {
 					if (hdata) {
 						score += terrainRoughness(s.x, s.y, hdata, b);
 						score += terrainRoughness(e.x, e.y, hdata, b);
+						// Penalize steep straight-line slope between start and end
+						const zS = sampleElevation(s.x, s.y, hdata, b);
+						const zE = sampleElevation(e.x, e.y, hdata, b);
+						if (zS != null && zE != null) {
+							const dz = Math.abs(zE - zS);
+							const avgSlopeDeg =
+								Math.atan2(dz, dist) * (180 / Math.PI);
+							// 75 % of rover max climbable slope
+							const mu = ARTEMIS_SR.wheel_friction_coeff;
+							const crr =
+								ARTEMIS_SR.rolling_resistance_coeff;
+							const maxClimb =
+								Math.atan(Math.max(0.001, mu - crr)) *
+								(180 / Math.PI);
+							const slopeLimit = maxClimb * 0.75;
+							if (avgSlopeDeg > slopeLimit) {
+								score +=
+									(avgSlopeDeg - slopeLimit) * 20;
+							}
+						}
 					}
 					if (score < bestScore) {
 						bestScore = score;
@@ -501,7 +528,7 @@ function App() {
 			const roundPromises = picked.map(async (name) => {
 				const round: GameRound = {
 					siteName: name,
-					mapType: "Elevation",
+					mapType: mapTypeRef.current,
 					startPoint: { x: 0, y: 0 },
 					endPoint: { x: 0, y: 0 },
 					userPath: [],
@@ -557,6 +584,8 @@ function App() {
 			return;
 		}
 		const nextRound = gameState.rounds[next];
+		const mt = mapTypeRef.current;
+		nextRound.mapType = mt;
 		setGameState((prev) => (prev ? { ...prev, currentRound: next } : prev));
 		setGameStartPoint(nextRound.startPoint);
 		setGameEndPoint(nextRound.endPoint);
@@ -565,7 +594,11 @@ function App() {
 		setManualStats(null);
 		setAutoStats(null);
 		setShowGameResult(false);
-		await loadSiteMap(nextRound.siteName, nextRound.mapType, "2026-05-13");
+		await loadSiteMap(
+			nextRound.siteName,
+			nextRound.mapType,
+			"2026-05-13",
+		);
 
 		// Pre-calculate autopath for this round (hidden, only used on Finish Path)
 		if (!nextRound.autoPath) {
@@ -660,8 +693,6 @@ function App() {
 
 			// 2. Use pre-calculated autopath (computed during round loading)
 			setAutoStats(Object.keys(autoStats).length > 0 ? autoStats : null);
-
-			// Reveal auto path on the map now
 			if (round.autoPath) {
 				setAutodesignResult({
 					path_xy: round.autoPath,
