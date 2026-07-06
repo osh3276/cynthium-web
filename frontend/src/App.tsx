@@ -95,38 +95,6 @@ function sampleElevation(
 	return top + (bottom - top) * fracR;
 }
 
-/** Estimate terrain roughness at a point by checking height variation ±3 cells away */
-function terrainRoughness(
-	x: number,
-	y: number,
-	hdata: number[][],
-	bounds: { left: number; right: number; bottom: number; top: number },
-): number {
-	const rows = hdata.length;
-	const cols = hdata[0].length;
-	const resX = (bounds.right - bounds.left) / (cols - 1);
-	const resY = (bounds.top - bounds.bottom) / (rows - 1);
-	const step = Math.max(resX, resY) * 3;
-	const z0 = sampleElevation(x, y, hdata, bounds);
-	if (z0 == null) return Infinity;
-	const offsets = [
-		[step, 0],
-		[-step, 0],
-		[0, step],
-		[0, -step],
-	];
-	let total = 0;
-	let n = 0;
-	for (const [dx, dy] of offsets) {
-		const z = sampleElevation(x + dx, y + dy, hdata, bounds);
-		if (z != null) {
-			total += Math.abs(z - z0);
-			n++;
-		}
-	}
-	return n > 0 ? total / n : Infinity;
-}
-
 function App() {
 	const [mapData, setMapData] = useState<MapPayload | null>(null);
 	const [status, setStatus] = useState<LoadStatus>("idle");
@@ -388,10 +356,8 @@ function App() {
 					7000,
 				);
 
-				// Generate candidates and pick the flattest pair
-				let best: { start: Waypoint; end: Waypoint } | null = null;
-				let bestScore = Infinity;
-				for (let i = 0; i < 25; i++) {
+				// Try candidate pairs until we find one with a viable path
+				for (;;) {
 					const s = {
 						x: randInRange(cx - halfSpan, cx + halfSpan),
 						y: randInRange(cy - halfSpan, cy + halfSpan),
@@ -402,47 +368,71 @@ function App() {
 					};
 					const dist = Math.hypot(e.x - s.x, e.y - s.y);
 					if (dist < 2000 || dist > 10000) continue;
-					let score = 0;
+
+					// Reject steep straight-line slope
 					if (hdata) {
-						score += terrainRoughness(s.x, s.y, hdata, b);
-						score += terrainRoughness(e.x, e.y, hdata, b);
-						// Penalize steep straight-line slope between start and end
 						const zS = sampleElevation(s.x, s.y, hdata, b);
 						const zE = sampleElevation(e.x, e.y, hdata, b);
 						if (zS != null && zE != null) {
 							const dz = Math.abs(zE - zS);
 							const avgSlopeDeg =
 								Math.atan2(dz, dist) * (180 / Math.PI);
-							// 75 % of rover max climbable slope
 							const mu = ARTEMIS_SR.wheel_friction_coeff;
-							const crr =
-								ARTEMIS_SR.rolling_resistance_coeff;
+							const crr = ARTEMIS_SR.rolling_resistance_coeff;
 							const maxClimb =
 								Math.atan(Math.max(0.001, mu - crr)) *
 								(180 / Math.PI);
-							const slopeLimit = maxClimb * 0.75;
-							if (avgSlopeDeg > slopeLimit) {
-								score +=
-									(avgSlopeDeg - slopeLimit) * 20;
-							}
+							if (avgSlopeDeg > maxClimb * 0.75) continue;
 						}
 					}
-					if (score < bestScore) {
-						bestScore = score;
-						best = { start: s, end: e };
-					}
+
+					// Test if autodesign can find a viable path
+					try {
+						const testRes = await fetch(
+							`/api/sites/${encodeURIComponent(round.siteName)}/autodesign`,
+							{
+								method: "POST",
+								headers: {
+									"Content-Type": "application/json",
+								},
+								body: JSON.stringify({
+									waypoints_xy: [[s.x, s.y], [e.x, e.y]],
+									slope_weight: 0.3,
+									sun_weight: 0.3,
+									meteor_weight: 0.05,
+									path_mode: "direct",
+									rover_mass_kg:
+										ARTEMIS_SR.mass_kg,
+									rover_power_hp:
+										ARTEMIS_SR.power_hp,
+									rover_friction_coeff:
+										ARTEMIS_SR.wheel_friction_coeff,
+									rover_crr:
+										ARTEMIS_SR.rolling_resistance_coeff,
+									max_attempts: 1,
+								}),
+							},
+						);
+						if (testRes.ok) {
+							const testData: AutodesignResult =
+								await testRes.json();
+							// Reject if path exists but simulation says infeasible
+							const feasible =
+								!testData.simulation ||
+								Number(
+									testData.simulation[
+										"traverse_feasible"
+									],
+								) >= 0.5;
+							if (feasible) {
+								return { start: s, end: e };
+							}
+						}
+					} catch {}
 				}
-				if (best) return best;
-				// Fallback: just return any valid pair
-				const start = {
-					x: randInRange(cx - halfSpan, cx + halfSpan),
-					y: randInRange(cy - halfSpan, cy + halfSpan),
-				};
-				const end = {
-					x: randInRange(cx - halfSpan, cx + halfSpan),
-					y: randInRange(cy - halfSpan, cy + halfSpan),
-				};
-				return { start, end };
+
+				// Fallback: no viable pair found, return null
+				return null;
 			} catch {
 				return null;
 			}

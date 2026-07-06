@@ -244,6 +244,7 @@ def compute_autodesign(
     rover_power_hp: float = 0.2,
     rover_friction_coeff: float = 0.6,
     rover_crr: float = 0.1,
+    max_attempts: int = 10,
 ) -> dict:
     """Compute a path and validate it via simulation with the rover params."""
     t_start = time.perf_counter()
@@ -268,11 +269,9 @@ def compute_autodesign(
     site_path_xy: list[list[float]] = []
     last_result: dict | None = None
 
-    for attempt in range(10):
+    for attempt in range(max_attempts):
         all_xy: list[tuple[float, float]] = []
-        blocked: set[tuple[int, int]] | None = (
-            blocked_pixels if blocked_pixels else None
-        )
+        blocked: set[tuple[int, int]] | None = blocked_pixels if blocked_pixels else None
 
         if path_mode == "direct":
             seg, err = _compute_segment(
@@ -309,9 +308,9 @@ def compute_autodesign(
                     blocked_pixels=blocked,
                 )
                 if err:
-                    return {"error": f"Segment {i + 1}: {err}"}
+                    return {"error": f"Segment {i+1}: {err}"}
                 if not seg or len(seg) < 2:
-                    return {"error": f"Segment {i + 1}: path too short"}
+                    return {"error": f"Segment {i+1}: path too short"}
                 if i == 0:
                     all_xy.extend(seg)
                 else:
@@ -338,12 +337,10 @@ def compute_autodesign(
 
         if feasible:
             elapsed = time.perf_counter() - t_start
-            print(
-                f"[TIMER] Autodesign {elapsed:.1f}s attempt={attempt + 1} | site={site_name} wps={len(waypoints_xy)} mode={path_mode} \u03bc={rover_mu} \u2192 feasible"
-            )
+            print(f"[TIMER] Autodesign {elapsed:.1f}s attempt={attempt+1} | site={site_name} wps={len(waypoints_xy)} mode={path_mode} mu={rover_mu} -> feasible")
             return {"path_xy": site_path_xy, "total_cost": 0.0, "expanded": 0}
 
-        # Block the failed path and retry using the site's elevation transform
+        # Block the failed path and retry
         site_data = load_site_data(site_name)
         if site_data and site_data.get("elevation_meta"):
             tf = site_data["elevation_meta"]["transform"]
@@ -352,21 +349,18 @@ def compute_autodesign(
                 c, r = inv * (float(x), float(y))
                 blocked_pixels.add((int(round(r)), int(round(c))))
 
-        print(
-            f"[TIMER] Autodesign attempt {attempt + 1} infeasible, retrying with {len(blocked_pixels)} cells blocked"
-        )
+        print(f"[TIMER] Autodesign attempt {attempt+1} infeasible, retrying with {len(blocked_pixels)} cells blocked")
 
-    # All attempts failed — return the last path + simulation result so frontend can show failure
+    # All attempts failed -- return the last path + simulation result
     elapsed = time.perf_counter() - t_start
-    print(
-        f"[TIMER] Autodesign {elapsed:.1f}s | gave up after 10 attempts, returning last path with failure info"
-    )
+    print(f"[TIMER] Autodesign {elapsed:.1f}s | gave up after 10 attempts, returning last path with failure info")
     return {
         "path_xy": site_path_xy,
         "total_cost": 0.0,
         "expanded": 0,
         "simulation": last_result or {},
     }
+
 
 
 def _compute_segment(
