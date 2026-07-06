@@ -155,6 +155,7 @@ function App() {
 	const [pendingGameResult, setPendingGameResult] = useState(false);
 	const [showGameFinish, setShowGameFinish] = useState(false);
 	const [gameLoading, setGameLoading] = useState(false);
+	const [showHowToPlay, setShowHowToPlay] = useState(false);
 
 	const handleCloseGameResult = useCallback(() => {
 		setShowGameResult(false);
@@ -573,6 +574,7 @@ function App() {
 			// Don't setAutodesignResult/setAutoStats here — keep them null until Finish Path
 		} finally {
 			setGameLoading(false);
+			setShowHowToPlay(true);
 		}
 	}, [loadSiteMap, generateRoundPoints]);
 
@@ -844,6 +846,43 @@ function App() {
 				<div className="dialog-overlay">
 					<div className="dialog" style={{ alignItems: "center" }}>
 						<div className="dialog-title">Loading game...</div>
+					</div>
+				</div>
+			)}
+			{showHowToPlay && (
+				<div className="dialog-overlay">
+					<div className="dialog">
+						<div className="dialog-title">How to Play</div>
+						<div style={{ fontSize: 12, lineHeight: 1.6, color: "#a8b2d1" }}>
+							<p style={{ marginBottom: 8 }}>
+								Plan a route across the lunar surface for the
+								Artemis SR rover. Each round gives you a start
+								and end point — place waypoints to define your
+								path.
+							</p>
+							<p style={{ marginBottom: 8 }}>
+								Click on the 2D map to place waypoints. The
+								first waypoint must be near the blue{" "}
+								<span style={{ color: "#4fc3f7" }}>S</span>{" "}
+								marker and the last near the red{" "}
+								<span style={{ color: "#e53935" }}>E</span>{" "}
+								marker.
+							</p>
+							<p style={{ marginBottom: 8 }}>
+								When you're ready, press{" "}
+								<strong>Finish Path</strong> to score your route
+								against the autodesigner's optimal path. The
+								higher score wins the round!
+							</p>
+							<p style={{ marginBottom: 8 }}>
+								Scores are based on path efficiency, energy
+								economy, illumination, meteor safety, traction
+								match, and power match across 5 rounds.
+							</p>
+						</div>
+						<button className="dialog-button" onClick={() => setShowHowToPlay(false)}>
+							Start Round 1
+						</button>
 					</div>
 				</div>
 			)}

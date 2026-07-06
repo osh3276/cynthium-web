@@ -251,15 +251,14 @@ export default function MapView({
 		autoStats,
 	);
 
-	// Fire onAnimationsComplete when the manual rover animation finishes
-	// (auto animation plays alongside but doesn't block the result dialog)
+	// Fire onAnimationsComplete when both rover animations finish
 	const animsDoneRef = useRef(false);
 	const animsStartedRef = useRef(false);
 	useEffect(() => {
 		// Only fire when there are actual stats to animate (game mode)
 		if (!manualStats && !autoStats) return;
 
-		const manualDone = roverAnim.done;
+		const bothDone = roverAnim.done && autoRoverAnim.done;
 		const eitherStarted = !roverAnim.done || !autoRoverAnim.done;
 
 		// Track that at least one rover has actually started animating
@@ -270,15 +269,16 @@ export default function MapView({
 			animsStartedRef.current = true;
 		}
 
-		if (manualDone && animsStartedRef.current && !animsDoneRef.current) {
+		if (bothDone && animsStartedRef.current && !animsDoneRef.current) {
 			animsDoneRef.current = true;
 			onAnimationsComplete?.();
 		}
-		if (!manualDone) {
+		if (!bothDone) {
 			animsDoneRef.current = false;
 		}
 	}, [
 		roverAnim.done,
+		autoRoverAnim.done,
 		manualStats,
 		autoStats,
 		onAnimationsComplete,
@@ -565,9 +565,13 @@ export default function MapView({
 									);
 								})()}
 
-							{/* Failure indicators — show red X at failure_xy if present */}
-							{_renderFailureMarker(manualStats, mapData!, imgNatural)}
-							{_renderFailureMarker(autoStats, mapData!, imgNatural)}
+							{/* Failure indicators — show red X only after rover animation reaches the failure point */}
+							{roverAnim.done &&
+								roverAnim.failed &&
+								_renderFailureMarker(manualStats, mapData!, imgNatural)}
+							{autoRoverAnim.done &&
+								autoRoverAnim.failed &&
+								_renderFailureMarker(autoStats, mapData!, imgNatural)}
 
 							{/* Animated rover dot - manual (cyan) */}
 							{roverAnim.pos && !roverAnim.done && (
