@@ -1,4 +1,5 @@
 import type { SimulationStats } from "../types";
+import { getFailureReason } from "../utils/failureReason";
 
 interface ScoreRow {
 		label: string;
@@ -50,6 +51,7 @@ export default function GameResultDialog({
 		{ label: "Distance", userVal: formatStat(userStats, "total_distance_travelled"), autoVal: formatStat(autoStats, "total_distance_travelled") },
 		{ label: "Time", userVal: formatTime(userStats), autoVal: formatTime(autoStats) },
 		{ label: "Feasible", userVal: formatFeasible(userStats), autoVal: formatFeasible(autoStats) },
+		{ label: "Failure Reason", userVal: formatFailureReason(userStats), autoVal: formatFailureReason(autoStats) },
 	];
 
 	return (
@@ -71,8 +73,8 @@ export default function GameResultDialog({
 						{rows.map((r) => (
 							<tr key={r.label}>
 								<td className="dialog-label">{r.label}</td>
-								<td className="dialog-val">{r.userVal}</td>
-								<td className="dialog-val">{r.autoVal}</td>
+								<td className={`dialog-val ${r.label === "Failure Reason" ? "dialog-val-wrap" : ""}`}>{r.userVal}</td>
+								<td className={`dialog-val ${r.label === "Failure Reason" ? "dialog-val-wrap" : ""}`}>{r.autoVal}</td>
 							</tr>
 						))}
 					</tbody>
@@ -130,6 +132,10 @@ function formatFeasible(stats: SimulationStats | null): string {
 		if (v == null || typeof v !== "number") return "-";
 		return v >= 0.5 ? "Yes" : "No";
 	}
+
+function formatFailureReason(stats: SimulationStats | null): string {
+	return getFailureReason(stats) ?? "-";
+}
 
 function formatSubscore(stats: SimulationStats | null, def: SubscoreDef): string {
 		const subs = stats?.["traversal_subscores"];

@@ -382,6 +382,19 @@ def compute_traversal_dynamics(
         "required_wheel_friction_coeff": float(required_mu_dynamic),
         "required_climb_slope_deg": float(np.degrees(np.arctan(required_mu_dynamic))),
     }
+    if float(physics["traverse_feasible"]) < 0.5:
+        if np.isfinite(required_mu_dynamic) and required_mu_dynamic > mu + 1e-3:
+            result["failure_reason"] = (
+                "Insufficient traction for slope: "
+                f"requires wheel friction μ >= {required_mu_dynamic:.2f}, "
+                f"current μ = {mu:.2f}."
+            )
+        elif not np.isfinite(required_mu_dynamic):
+            result["failure_reason"] = (
+                "Insufficient drive power for the route's slope and rolling resistance."
+            )
+        else:
+            result["failure_reason"] = "Route is dynamically infeasible for the current rover settings."
     # Pass through failure point if simulation failed
     if "failure_xy" in physics:
         result["failure_xy"] = physics["failure_xy"]

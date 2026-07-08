@@ -81,6 +81,7 @@ export interface TraversalScore {
 export interface SimulationStats {
 	[key: string]: number | string | number[] | number[][] | undefined;
 	failure_xy?: [number, number];
+	failure_reason?: string;
 	/** Per-point velocity profile: [x, y, velocity_mps] for each sub-step along the path */
 	path_velocity_profile?: [number, number, number][];
 }

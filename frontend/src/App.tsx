@@ -111,6 +111,7 @@ function App() {
 	const [autoStats, setAutoStats] = useState<SimulationStats | null>(null);
 	const [simulating, setSimulating] = useState(false);
 	const [resultsHeight, setResultsHeight] = useState(200);
+	const resultsAreaRef = useRef<HTMLDivElement>(null);
 	const resizeRef = useRef<boolean>(false);
 	const loadedSiteRef = useRef("");
 	const mapTypeRef = useRef("Elevation");
@@ -314,11 +315,44 @@ function App() {
 			resizeRef.current = true;
 			const startY = e.clientY;
 			const startH = resultsHeight;
+			const panelEl = resultsAreaRef.current?.querySelector(
+				".simulation-results",
+			) as HTMLElement | null;
+			let minResultsHeight = 100;
+			if (panelEl) {
+				const headerEl = panelEl.querySelector(
+					".results-header",
+				) as HTMLElement | null;
+				const statusEl = panelEl.querySelector(
+					".results-status",
+				) as HTMLElement | null;
+				const scrollEl = panelEl.querySelector(
+					".results-scroll",
+				) as HTMLElement | null;
+				const panelStyle = window.getComputedStyle(panelEl);
+				const panelPaddingY =
+					parseFloat(panelStyle.paddingTop) +
+					parseFloat(panelStyle.paddingBottom);
+				const panelGap =
+					parseFloat(panelStyle.rowGap || panelStyle.gap || "0") * 2;
+				const scrollContentHeight = scrollEl
+					? Array.from(scrollEl.children).reduce((sum, child) => {
+							return sum + (child as HTMLElement).scrollHeight;
+						}, 0)
+					: 0;
+				minResultsHeight = Math.ceil(
+					panelPaddingY +
+						panelGap +
+						(headerEl?.offsetHeight ?? 0) +
+						(statusEl?.offsetHeight ?? 0) +
+						scrollContentHeight,
+				);
+			}
 			const onMove = (me: MouseEvent) => {
 				if (!resizeRef.current) return;
 				const dy = me.clientY - startY;
 				const newH = Math.max(
-					100,
+					minResultsHeight,
 					Math.min(window.innerHeight * 0.8, startH - dy),
 				);
 				setResultsHeight(newH);
@@ -765,6 +799,7 @@ function App() {
 					{!gameState?.active && (
 						<div
 							className="results-area"
+							ref={resultsAreaRef}
 							style={{ height: resultsHeight }}
 						>
 							<SimulationResultsPanel

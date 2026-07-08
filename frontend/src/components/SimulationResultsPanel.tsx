@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { SimulationStats } from "../types";
 import { SCORE_MAX_PATH_EFFICIENCY, SCORE_MAX_ENERGY_ECONOMY, SCORE_MAX_ILLUMINATION, SCORE_MAX_METEOR_SAFETY, SCORE_MAX_TRACTION_MATCH, SCORE_MAX_POWER_MATCH } from "../constants";
+import { getFailureReason } from "../utils/failureReason";
 
 interface Props {
 	manualStats: SimulationStats | null;
@@ -65,6 +66,7 @@ export default function SimulationResultsPanel({
 }: Props) {
 	const [outerTab, setOuterTab] = useState(0);
 	const activeStats = outerTab === 0 ? manualStats : autoStats;
+	const activeFailureReason = getFailureReason(activeStats);
 	const hasAny = manualStats != null || autoStats != null;
 	const statusText = simulating ? "Simulating..." : hasAny ? "Simulation complete" : "No simulation run yet";
 
@@ -85,6 +87,9 @@ export default function SimulationResultsPanel({
 					</div>
 				)}
 				<ScoreCard stats={activeStats} />
+				{activeStats && activeFailureReason && (
+					<div className="failure-reason-text">{activeFailureReason}</div>
+				)}
 			</div>
 		</div>
 	);

@@ -195,16 +195,6 @@ export default function Sidebar({
 					<>
 						<div className="sidebar-divider" />
 						<div className="panel">
-							<button
-								className="panel-button generate-button"
-								onClick={onStartGame}
-								style={{ width: "100%" }}
-							>
-								Start Game
-							</button>
-						</div>
-						<div className="sidebar-divider" />
-						<div className="panel">
 							<h3 className="panel-title">Autodesign</h3>
 							<div
 								className="field-row"
@@ -266,18 +256,19 @@ export default function Sidebar({
 							</div>
 
 							<div className="field-row">
-								<button
-									className={`panel-button panel-button-sm ${pathMode === "segment" ? "btn-active" : ""}`}
-									onClick={() => setPathMode("segment")}
+								<label className="field-label">Path mode:</label>
+								<select
+									className="field-input"
+									value={pathMode}
+									onChange={(e) =>
+										setPathMode(
+											e.target.value as "segment" | "direct",
+										)
+									}
 								>
-									Per-segment
-								</button>
-								<button
-									className={`panel-button panel-button-sm ${pathMode === "direct" ? "btn-active" : ""}`}
-									onClick={() => setPathMode("direct")}
-								>
-									Direct
-								</button>
+									<option value="segment">Per-segment</option>
+									<option value="direct">Direct</option>
+								</select>
 								<button
 									className="panel-button panel-button-sm"
 									onClick={handleRun}
@@ -299,6 +290,16 @@ export default function Sidebar({
 								value={autodesignLines}
 								placeholder="(autodesign output will appear here)"
 							/>
+						</div>
+						<div className="sidebar-divider" />
+						<div className="panel start-game-panel">
+							<button
+								className="panel-button generate-button"
+								onClick={onStartGame}
+								style={{ width: "100%" }}
+							>
+								Start Game
+							</button>
 						</div>
 					</>
 				)}

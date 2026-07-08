@@ -9,6 +9,10 @@
 	box-sizing: border-box;
 }
 
+.start-game-panel {
+	margin-top: auto;
+}
+
 :root {
 	--bg: #0a0a0f;
 	--bg-light: #111118;
@@ -41,6 +45,16 @@
 	--glow-cyan: 0 0 12px rgba(0, 212, 255, 0.3);
 	--glow-magenta: 0 0 12px rgba(255, 45, 120, 0.3);
 	--glow-green: 0 0 12px rgba(34, 214, 140, 0.3);
+}
+
+.failure-reason-text {
+	margin-top: 8px;
+	padding: 6px 8px;
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--orange);
+	background: rgba(245, 158, 11, 0.08);
+	border: 1px solid rgba(245, 158, 11, 0.35);
 }
 
 html,
@@ -181,6 +195,7 @@ body {
 
 .results-area {
 	flex-shrink: 0;
+	min-height: fit-content;
 }
 
 .results-scroll {
@@ -465,6 +480,7 @@ body {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
+	min-height: 100%;
 }
 
 .sidebar-divider {
@@ -806,6 +822,13 @@ select.field-input option {
 	font-family: var(--font-mono);
 	font-size: 12px;
 	font-weight: 500;
+}
+
+.dialog-val-wrap {
+	text-align: left;
+	font-family: var(--font);
+	white-space: normal;
+	line-height: 1.35;
 }
 
 .dialog-button {
