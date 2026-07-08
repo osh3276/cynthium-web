@@ -195,6 +195,8 @@ function App() {
 	const handleClearWaypoints = useCallback(() => {
 		setWaypoints([]);
 		setAutodesignResult(null);
+		setManualStats(null);
+		setAutoStats(null);
 	}, []);
 
 	const handleAutodesign = useCallback(
