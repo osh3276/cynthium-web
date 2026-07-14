@@ -484,8 +484,71 @@ export default function MapView({
 										</g>
 									);
 								})()}
+							{/* Outline stroke for the dotted line — renders underneath */}
+							{waypoints.length > 1 && (
+								<polyline
+									fill="none"
+									stroke="rgba(0,0,0,0.6)"
+									strokeWidth={4}
+									strokeLinecap="round"
+									points={waypoints
+										.map((wp, i) => {
+											const isDragged = dragWpIndex.current === i && dragWpPos != null;
+											const p = isDragged ? dragWpPos : wp;
+											const b = mapData!.bounds;
+											const ix =
+												((p.x - b.left) /
+													(b.right - b.left)) *
+												imgNatural.w;
+											const iy =
+												imgNatural.h -
+												((p.y - b.bottom) /
+													(b.top - b.bottom)) *
+													imgNatural.h;
+											return `${ix},${iy}`;
+										})
+										.join(" ")}
+								/>
+							)}
+							{/* Dotted line on top of outline */}
+							{waypoints.length > 1 && (
+								<polyline
+									fill="none"
+									stroke="white"
+									strokeWidth={2}
+									strokeDasharray="6,3"
+									points={waypoints
+										.map((wp, i) => {
+											const isDragged = dragWpIndex.current === i && dragWpPos != null;
+											const p = isDragged ? dragWpPos : wp;
+											const b = mapData!.bounds;
+											const ix =
+												((p.x - b.left) /
+													(b.right - b.left)) *
+												imgNatural.w;
+											const iy =
+												imgNatural.h -
+												((p.y - b.bottom) /
+													(b.top - b.bottom)) *
+													imgNatural.h;
+											return `${ix},${iy}`;
+										})
+										.join(" ")}
+								/>
+							)}
+							{/* Cursor hint when hovering near a waypoint */}
+							{dragWpIndex.current != null && dragWpPos && (
+								<circle
+									cx={((dragWpPos.x - mapData!.bounds.left) / (mapData!.bounds.right - mapData!.bounds.left)) * imgNatural.w}
+									cy={imgNatural.h - ((dragWpPos.y - mapData!.bounds.bottom) / (mapData!.bounds.top - mapData!.bounds.bottom)) * imgNatural.h}
+									r={8}
+									fill="none"
+									stroke="#4fc3f7"
+									strokeWidth={2}
+									strokeDasharray="4,2"
+								/>
+							)}
 							{waypoints.map((wp, i) => {
-								// If this waypoint is being dragged, use drag pos
 								const isDragged = dragWpIndex.current === i && dragWpPos != null;
 								const displayWp = isDragged ? dragWpPos : wp;
 								const b = mapData!.bounds;
@@ -511,53 +574,15 @@ export default function MapView({
 											y={iy + 3}
 											fill={isDragged ? "#4fc3f7" : "white"}
 											fontSize={10}
-											fontWeight={isDragged ? 700 : 400}
+											fontWeight={700}
 											stroke="black"
-											strokeWidth={0.4}
+											strokeWidth={0.5}
 										>
 											{i + 1}
 										</text>
 									</g>
 								);
 							})}
-							{/* Cursor hint when hovering near a waypoint — invisible overlay area */}
-							{dragWpIndex.current != null && dragWpPos && (
-								<circle
-									cx={((dragWpPos.x - mapData!.bounds.left) / (mapData!.bounds.right - mapData!.bounds.left)) * imgNatural.w}
-									cy={imgNatural.h - ((dragWpPos.y - mapData!.bounds.bottom) / (mapData!.bounds.top - mapData!.bounds.bottom)) * imgNatural.h}
-									r={8}
-									fill="none"
-									stroke="#4fc3f7"
-									strokeWidth={2}
-									strokeDasharray="4,2"
-								/>
-							)}
-							{waypoints.length > 1 && (
-								<polyline
-									fill="none"
-									stroke="white"
-									strokeWidth={2}
-									strokeDasharray="6,3"
-									points={waypoints
-										.map((wp, i) => {
-											// Use drag position if dragging
-											const isDragged = dragWpIndex.current === i && dragWpPos != null;
-											const p = isDragged ? dragWpPos : wp;
-											const b = mapData!.bounds;
-											const ix =
-												((p.x - b.left) /
-													(b.right - b.left)) *
-												imgNatural.w;
-											const iy =
-												imgNatural.h -
-												((p.y - b.bottom) /
-													(b.top - b.bottom)) *
-													imgNatural.h;
-											return `${ix},${iy}`;
-										})
-										.join(" ")}
-								/>
-							)}
 							{autodesignResult &&
 								autodesignResult.path_xy.length > 1 &&
 								(() => {
