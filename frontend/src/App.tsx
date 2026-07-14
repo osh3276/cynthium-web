@@ -168,7 +168,7 @@ function App() {
 				if (!res.ok) throw new Error(await res.text());
 				const data: AutodesignResult = await res.json();
 				setAutodesignResult(data);
-				if (data.simulation?.failure_xy) {
+				if (data.simulation) {
 					setAutoStats(data.simulation);
 				}
 			} catch (err) {
