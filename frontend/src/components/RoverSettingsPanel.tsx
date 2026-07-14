@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { RoverSettings } from "../types";
 
 interface Props {
@@ -13,17 +13,61 @@ const PRESETS: Record<string, RoverSettings> = {
 	"Artemis SR": { mass_kg: 530, power_hp: 0.72, wheel_friction_coeff: 0.7, rolling_resistance_coeff: 0.15 },
 };
 
+type Field = keyof RoverSettings;
+
 export default function RoverSettingsPanel({ settings, onChange, readOnly }: Props) {
+	const [fieldStrings, setFieldStrings] = useState<Record<Field, string>>(() => ({
+		mass_kg: String(settings.mass_kg),
+		power_hp: String(settings.power_hp),
+		wheel_friction_coeff: String(settings.wheel_friction_coeff),
+		rolling_resistance_coeff: String(settings.rolling_resistance_coeff),
+	}));
+
+	// Sync local strings when settings change externally (preset, game init, etc.)
+	useEffect(() => {
+		setFieldStrings((prev) => {
+			const next: Record<Field, string> = {
+				mass_kg: String(settings.mass_kg),
+				power_hp: String(settings.power_hp),
+				wheel_friction_coeff: String(settings.wheel_friction_coeff),
+				rolling_resistance_coeff: String(settings.rolling_resistance_coeff),
+			};
+			// Only update if different — don't clobber in-progress typing
+			if (
+				prev.mass_kg === next.mass_kg &&
+				prev.power_hp === next.power_hp &&
+				prev.wheel_friction_coeff === next.wheel_friction_coeff &&
+				prev.rolling_resistance_coeff === next.rolling_resistance_coeff
+			) {
+				return prev;
+			}
+			return next;
+		});
+	}, [settings]);
+
 	const handleChange = useCallback(
-			(field: keyof RoverSettings) => (e: React.ChangeEvent<HTMLInputElement>) => {
-				if (readOnly) return;
-				const val = parseFloat(e.target.value);
-				if (!isNaN(val) && val > 0) {
-					onChange({ ...settings, [field]: val });
-				}
-			},
-			[settings, onChange, readOnly],
-		);
+		(field: Field) => (e: React.ChangeEvent<HTMLInputElement>) => {
+			if (readOnly) return;
+			setFieldStrings((prev) => ({ ...prev, [field]: e.target.value }));
+		},
+		[readOnly],
+	);
+
+	const commitField = useCallback(
+		(field: Field) => {
+			if (readOnly) return;
+			const raw = fieldStrings[field];
+			if (raw === "") return;
+			const val = parseFloat(raw);
+			if (!isNaN(val) && val >= 0) {
+				onChange({ ...settings, [field]: val });
+			} else {
+				// Revert to current setting value
+				setFieldStrings((prev) => ({ ...prev, [field]: String(settings[field]) }));
+			}
+		},
+		[settings, fieldStrings, onChange, readOnly],
+	);
 
 	const handlePreset = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
 		if (readOnly) return;
@@ -55,7 +99,13 @@ export default function RoverSettingsPanel({ settings, onChange, readOnly }: Pro
 				{readOnly ? (
 					<span className="field-value-text">{settings.mass_kg}</span>
 				) : (
-					<input className="field-input" type="text" value={settings.mass_kg} onChange={handleChange("mass_kg")} />
+					<input
+						className="field-input"
+						type="text"
+						value={fieldStrings.mass_kg}
+						onChange={handleChange("mass_kg")}
+						onBlur={() => commitField("mass_kg")}
+					/>
 				)}
 			</div>
 
@@ -64,7 +114,13 @@ export default function RoverSettingsPanel({ settings, onChange, readOnly }: Pro
 				{readOnly ? (
 					<span className="field-value-text">{settings.power_hp}</span>
 				) : (
-					<input className="field-input" type="text" value={settings.power_hp} onChange={handleChange("power_hp")} />
+					<input
+						className="field-input"
+						type="text"
+						value={fieldStrings.power_hp}
+						onChange={handleChange("power_hp")}
+						onBlur={() => commitField("power_hp")}
+					/>
 				)}
 			</div>
 
@@ -73,7 +129,13 @@ export default function RoverSettingsPanel({ settings, onChange, readOnly }: Pro
 				{readOnly ? (
 					<span className="field-value-text">{settings.wheel_friction_coeff}</span>
 				) : (
-					<input className="field-input" type="text" value={settings.wheel_friction_coeff} onChange={handleChange("wheel_friction_coeff")} />
+					<input
+						className="field-input"
+						type="text"
+						value={fieldStrings.wheel_friction_coeff}
+						onChange={handleChange("wheel_friction_coeff")}
+						onBlur={() => commitField("wheel_friction_coeff")}
+					/>
 				)}
 			</div>
 
@@ -82,11 +144,15 @@ export default function RoverSettingsPanel({ settings, onChange, readOnly }: Pro
 				{readOnly ? (
 					<span className="field-value-text">{settings.rolling_resistance_coeff}</span>
 				) : (
-					<input className="field-input" type="text" value={settings.rolling_resistance_coeff} onChange={handleChange("rolling_resistance_coeff")} />
+					<input
+						className="field-input"
+						type="text"
+						value={fieldStrings.rolling_resistance_coeff}
+						onChange={handleChange("rolling_resistance_coeff")}
+						onBlur={() => commitField("rolling_resistance_coeff")}
+					/>
 				)}
 			</div>
-
-
 		</div>
 	);
 }
