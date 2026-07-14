@@ -1,5 +1,6 @@
 import type { Waypoint, GameState } from "../types";
 import { ARTEMIS_SR } from "./roverPresets";
+import PlanningPanel from "../components/PlanningPanel";
 
 interface Props {
 	gameState: GameState;
@@ -8,6 +9,11 @@ interface Props {
 	waypoints: Waypoint[];
 	onFinishPath: () => void;
 	onNextRound: () => void;
+	onRemoveWaypoint: (index: number) => void;
+	onUpdateWaypoint: (index: number, wp: Waypoint) => void;
+	onMoveWaypoint: (fromIndex: number, toIndex: number) => void;
+	onClearWaypoints: () => void;
+	onAddWaypoint: (wp: Waypoint) => void;
 	simulating: boolean;
 }
 
@@ -18,6 +24,11 @@ export default function GameSidebar({
 	waypoints,
 	onFinishPath,
 	onNextRound,
+	onRemoveWaypoint,
+	onUpdateWaypoint,
+	onMoveWaypoint,
+	onClearWaypoints,
+	onAddWaypoint,
 	simulating,
 }: Props) {
 	return (
@@ -61,18 +72,6 @@ export default function GameSidebar({
 							{gameEndPoint?.y.toFixed(1)})
 						</span>
 					</div>
-					<div
-						className="field-row"
-						style={{
-							fontSize: 11,
-							color: "var(--text-dim)",
-							marginBottom: 4,
-						}}
-					>
-						<span>
-							Waypoints placed: {waypoints.length}
-						</span>
-					</div>
 				</div>
 				<div className="sidebar-divider" />
 				<div className="panel">
@@ -108,6 +107,15 @@ export default function GameSidebar({
 						</span>
 					</div>
 				</div>
+				<div className="sidebar-divider" />
+				<PlanningPanel
+					waypoints={waypoints}
+					onAddWaypoint={onAddWaypoint}
+					onRemoveWaypoint={onRemoveWaypoint}
+					onUpdateWaypoint={onUpdateWaypoint}
+					onMoveWaypoint={onMoveWaypoint}
+					onClearWaypoints={onClearWaypoints}
+				/>
 				<div className="sidebar-divider" />
 				<div className="panel">
 					{gameState.rounds[gameState.currentRound]

@@ -88,13 +88,48 @@ export default function GamePage() {
 	});
 
 	const handleAddWaypoint = useCallback(
-			(wp: Waypoint) => {
-				if (showGameResult || showGameFinish) return;
-				setWaypoints((prev) => [...prev, wp]);
-				setAutodesignResult(null);
-			},
-			[showGameResult, showGameFinish],
-		);
+				(wp: Waypoint) => {
+					if (showGameResult || showGameFinish) return;
+					setWaypoints((prev) => [...prev, wp]);
+					setAutodesignResult(null);
+				},
+				[showGameResult, showGameFinish],
+			);
+
+	const handleUpdateWaypoint = useCallback((index: number, wp: Waypoint) => {
+		if (showGameResult || showGameFinish) return;
+		setWaypoints((prev) => {
+			const next = [...prev];
+			next[index] = wp;
+			return next;
+		});
+		setAutodesignResult(null);
+	}, [showGameResult, showGameFinish]);
+
+	const handleMoveWaypoint = useCallback((fromIndex: number, toIndex: number) => {
+		if (showGameResult || showGameFinish) return;
+		setWaypoints((prev) => {
+			const next = [...prev];
+			const [moved] = next.splice(fromIndex, 1);
+			next.splice(toIndex, 0, moved);
+			return next;
+		});
+		setAutodesignResult(null);
+	}, [showGameResult, showGameFinish]);
+
+	const handleRemoveWaypoint = useCallback((index: number) => {
+		if (showGameResult || showGameFinish) return;
+		setWaypoints((prev) => prev.filter((_, i) => i !== index));
+		setAutodesignResult(null);
+	}, [showGameResult, showGameFinish]);
+
+	const handleClearWaypoints = useCallback(() => {
+		if (showGameResult || showGameFinish) return;
+		setWaypoints([]);
+		setAutodesignResult(null);
+		setManualStats(null);
+		setAutoStats(null);
+	}, [showGameResult, showGameFinish]);
 
 	// Auto-start game on mount
 	useEffect(() => {
@@ -120,6 +155,7 @@ export default function GamePage() {
 							waypoints={waypoints}
 							autodesignResult={autodesignResult}
 							onAddWaypoint={handleAddWaypoint}
+							onUpdateWaypoint={handleUpdateWaypoint}
 							gameStartPoint={gameStartPoint}
 							gameEndPoint={gameEndPoint}
 							manualStats={manualStats}
@@ -131,14 +167,19 @@ export default function GamePage() {
 				{gameState && (
 					<div className="sidebar-pane">
 						<GameSidebar
-							gameState={gameState}
-							gameStartPoint={gameStartPoint}
-							gameEndPoint={gameEndPoint}
-							waypoints={waypoints}
-							onFinishPath={handleFinishPath}
-							onNextRound={advanceRound}
-							simulating={simulating}
-						/>
+								gameState={gameState}
+								gameStartPoint={gameStartPoint}
+								gameEndPoint={gameEndPoint}
+								waypoints={waypoints}
+								onFinishPath={handleFinishPath}
+								onNextRound={advanceRound}
+								onRemoveWaypoint={handleRemoveWaypoint}
+								onUpdateWaypoint={handleUpdateWaypoint}
+								onMoveWaypoint={handleMoveWaypoint}
+								onClearWaypoints={handleClearWaypoints}
+								onAddWaypoint={handleAddWaypoint}
+								simulating={simulating}
+							/>
 					</div>
 				)}
 			</div>
