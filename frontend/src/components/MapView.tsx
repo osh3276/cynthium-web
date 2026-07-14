@@ -19,30 +19,32 @@ import { useRoverAnimation } from "./useRoverAnimation";
 const ROVER_ANIMATION_SPEED = 30;
 
 interface Props {
-	mapData: MapPayload | null;
-	status: LoadStatus;
-	waypoints: Waypoint[];
-	autodesignResult: AutodesignResult | null;
-	onAddWaypoint: (wp: Waypoint) => void;
-	gameStartPoint?: Waypoint | null;
-	gameEndPoint?: Waypoint | null;
-	manualStats: SimulationStats | null;
-	autoStats: SimulationStats | null;
-	onAnimationsComplete?: () => void;
-}
+		mapData: MapPayload | null;
+		status: LoadStatus;
+		waypoints: Waypoint[];
+		autodesignResult: AutodesignResult | null;
+		onAddWaypoint: (wp: Waypoint) => void;
+		onUpdateWaypoint?: (index: number, wp: Waypoint) => void;
+		gameStartPoint?: Waypoint | null;
+		gameEndPoint?: Waypoint | null;
+		manualStats: SimulationStats | null;
+		autoStats: SimulationStats | null;
+		onAnimationsComplete?: () => void;
+	}
 
 export default function MapView({
-	mapData,
-	status,
-	waypoints,
-	autodesignResult,
-	onAddWaypoint,
-	gameStartPoint,
-	gameEndPoint,
-	manualStats,
-	autoStats,
-	onAnimationsComplete,
-}: Props) {
+		mapData,
+		status,
+		waypoints,
+		autodesignResult,
+		onAddWaypoint,
+		onUpdateWaypoint,
+		gameStartPoint,
+		gameEndPoint,
+		manualStats,
+		autoStats,
+		onAnimationsComplete,
+	}: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const imgRef = useRef<HTMLImageElement | null>(null);
@@ -111,6 +113,10 @@ export default function MapView({
 	const panStart = useRef({ x: 0, y: 0 });
 	const pointerDownPos = useRef({ x: 0, y: 0 });
 	const pointerDownTime = useRef(0);
+
+	// Waypoint drag state
+	const dragWpIndex = useRef<number | null>(null);
+	const [dragWpPos, setDragWpPos] = useState<{ x: number; y: number } | null>(null);
 
 	// Attach wheel listener as non-passive so preventDefault works
 	useEffect(() => {
@@ -181,17 +187,45 @@ export default function MapView({
 	const onPointerDown = useCallback((e: React.PointerEvent) => {
 		pointerActive.current = true;
 		panning.current = false;
+		dragWpIndex.current = null;
 		panStart.current = { x: e.clientX, y: e.clientY };
 		pointerDownPos.current = { x: e.clientX, y: e.clientY };
 		pointerDownTime.current = Date.now();
+
+		// Check if clicking near an existing waypoint to start a drag
+		const wp = screenToWorld(e.clientX, e.clientY);
+		if (wp && mapData && onUpdateWaypoint) {
+			const threshold = (mapData.bounds.right - mapData.bounds.left) * 0.01;
+			for (let i = 0; i < waypoints.length; i++) {
+				const dx = wp.x - waypoints[i].x;
+				const dy = wp.y - waypoints[i].y;
+				if (Math.hypot(dx, dy) < threshold) {
+					dragWpIndex.current = i;
+					break;
+				}
+			}
+		}
+
 		(e.target as HTMLElement).setPointerCapture(e.pointerId);
-	}, []);
+	}, [screenToWorld, mapData, waypoints, onUpdateWaypoint]);
 
 	const onPointerMove = useCallback(
 		(e: React.PointerEvent) => {
 			if (!pointerActive.current) return;
 			const dx = e.clientX - panStart.current.x;
 			const dy = e.clientY - panStart.current.y;
+
+			// If dragging a waypoint, update its temporary position
+			if (dragWpIndex.current != null && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
+				panning.current = true;
+				const wp = screenToWorld(e.clientX, e.clientY);
+				if (wp) {
+					setDragWpPos(wp);
+				}
+				panStart.current = { x: e.clientX, y: e.clientY };
+				return;
+			}
+
 			if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
 				panning.current = true;
 			}
@@ -201,13 +235,23 @@ export default function MapView({
 			panStart.current = { x: e.clientX, y: e.clientY };
 			applyTransform();
 		},
-		[applyTransform],
+		[applyTransform, screenToWorld],
 	);
 
 	const onPointerUp = useCallback(
 		(e: React.PointerEvent) => {
 			pointerActive.current = false;
 			(e.target as HTMLElement).releasePointerCapture(e.pointerId);
+
+			// Finalize waypoint drag
+			if (dragWpIndex.current != null && dragWpPos && panning.current && onUpdateWaypoint) {
+				onUpdateWaypoint(dragWpIndex.current, dragWpPos);
+				setDragWpPos(null);
+				dragWpIndex.current = null;
+				return;
+			}
+			setDragWpPos(null);
+			dragWpIndex.current = null;
 
 			if (!panning.current) {
 				const dx = Math.abs(e.clientX - pointerDownPos.current.x);
@@ -219,7 +263,7 @@ export default function MapView({
 				}
 			}
 		},
-		[screenToWorld, onAddWaypoint],
+		[screenToWorld, onAddWaypoint, onUpdateWaypoint, dragWpPos],
 	);
 
 	// Throttled overlay display
@@ -438,37 +482,53 @@ export default function MapView({
 									);
 								})()}
 							{waypoints.map((wp, i) => {
+								// If this waypoint is being dragged, use drag pos
+								const isDragged = dragWpIndex.current === i && dragWpPos != null;
+								const displayWp = isDragged ? dragWpPos : wp;
 								const b = mapData!.bounds;
 								const ix =
-									((wp.x - b.left) / (b.right - b.left)) *
+									((displayWp.x - b.left) / (b.right - b.left)) *
 									imgNatural.w;
 								const iy =
 									imgNatural.h -
-									((wp.y - b.bottom) / (b.top - b.bottom)) *
-										imgNatural.h;
+									((displayWp.y - b.bottom) / (b.top - b.bottom)) *
+									imgNatural.h;
 								return (
 									<g key={i}>
 										<circle
 											cx={ix}
 											cy={iy}
-											r={4}
-											fill="white"
-											stroke="black"
-											strokeWidth={1.2}
+											r={isDragged ? 6 : 5}
+											fill={isDragged ? "#4fc3f7" : "white"}
+											stroke={isDragged ? "#0288d1" : "black"}
+											strokeWidth={1.5}
 										/>
 										<text
-											x={ix + 6}
-											y={iy + 2}
-											fill="white"
-											fontSize={9}
+											x={ix + 7}
+											y={iy + 3}
+											fill={isDragged ? "#4fc3f7" : "white"}
+											fontSize={10}
+											fontWeight={isDragged ? 700 : 400}
 											stroke="black"
-											strokeWidth={0.3}
+											strokeWidth={0.4}
 										>
 											{i + 1}
 										</text>
 									</g>
 								);
 							})}
+							{/* Cursor hint when hovering near a waypoint — invisible overlay area */}
+							{dragWpIndex.current != null && dragWpPos && (
+								<circle
+									cx={((dragWpPos.x - mapData!.bounds.left) / (mapData!.bounds.right - mapData!.bounds.left)) * imgNatural.w}
+									cy={imgNatural.h - ((dragWpPos.y - mapData!.bounds.bottom) / (mapData!.bounds.top - mapData!.bounds.bottom)) * imgNatural.h}
+									r={8}
+									fill="none"
+									stroke="#4fc3f7"
+									strokeWidth={2}
+									strokeDasharray="4,2"
+								/>
+							)}
 							{waypoints.length > 1 && (
 								<polyline
 									fill="none"
@@ -476,15 +536,18 @@ export default function MapView({
 									strokeWidth={2}
 									strokeDasharray="6,3"
 									points={waypoints
-										.map((wp) => {
+										.map((wp, i) => {
+											// Use drag position if dragging
+											const isDragged = dragWpIndex.current === i && dragWpPos != null;
+											const p = isDragged ? dragWpPos : wp;
 											const b = mapData!.bounds;
 											const ix =
-												((wp.x - b.left) /
+												((p.x - b.left) /
 													(b.right - b.left)) *
 												imgNatural.w;
 											const iy =
 												imgNatural.h -
-												((wp.y - b.bottom) /
+												((p.y - b.bottom) /
 													(b.top - b.bottom)) *
 													imgNatural.h;
 											return `${ix},${iy}`;

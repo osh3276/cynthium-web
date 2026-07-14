@@ -11,37 +11,41 @@ import type {
 } from "../types";
 
 interface Props {
-	onLoadSite: (siteName: string, mapType: string, date: string) => void;
-	onChangeMapType?: (mapType: string, date: string) => void;
-	status: LoadStatus;
-	waypoints: Waypoint[];
-	onAddWaypoint: (wp: Waypoint) => void;
-	onRemoveWaypoint: (index: number) => void;
-	onClearWaypoints: () => void;
-	onAutodesign: (config: AutodesignConfig) => void;
-	autodesignRunning: boolean;
-	autodesignResult: AutodesignResult | null;
-	roverSettings: RoverSettings;
-	onRoverChange: (settings: RoverSettings) => void;
-	onStartGame?: () => void;
-	simulating?: boolean;
-}
+		onLoadSite: (siteName: string, mapType: string, date: string) => void;
+		onChangeMapType?: (mapType: string, date: string) => void;
+		status: LoadStatus;
+		waypoints: Waypoint[];
+		onAddWaypoint: (wp: Waypoint) => void;
+		onRemoveWaypoint: (index: number) => void;
+		onUpdateWaypoint: (index: number, wp: Waypoint) => void;
+		onMoveWaypoint: (fromIndex: number, toIndex: number) => void;
+		onClearWaypoints: () => void;
+		onAutodesign: (config: AutodesignConfig) => void;
+		autodesignRunning: boolean;
+		autodesignResult: AutodesignResult | null;
+		roverSettings: RoverSettings;
+		onRoverChange: (settings: RoverSettings) => void;
+		onStartGame?: () => void;
+		simulating?: boolean;
+	}
 
 export default function Sidebar({
-	onLoadSite,
-	onChangeMapType,
-	status,
-	waypoints,
-	onAddWaypoint,
-	onRemoveWaypoint,
-	onClearWaypoints,
-	onAutodesign,
-	autodesignRunning,
-	autodesignResult,
-	roverSettings,
-	onRoverChange,
-	onStartGame,
-}: Props) {
+		onLoadSite,
+		onChangeMapType,
+		status,
+		waypoints,
+		onAddWaypoint,
+		onRemoveWaypoint,
+		onUpdateWaypoint,
+		onMoveWaypoint,
+		onClearWaypoints,
+		onAutodesign,
+		autodesignRunning,
+		autodesignResult,
+		roverSettings,
+		onRoverChange,
+		onStartGame,
+	}: Props) {
 	const [slopeWeight, setSlopeWeight] = useState("0.3");
 	const [sunWeight, setSunWeight] = useState("0.3");
 	const [meteorWeight, setMeteorWeight] = useState("0.05");
@@ -94,6 +98,8 @@ export default function Sidebar({
 					waypoints={waypoints}
 					onAddWaypoint={onAddWaypoint}
 					onRemoveWaypoint={onRemoveWaypoint}
+					onUpdateWaypoint={onUpdateWaypoint}
+					onMoveWaypoint={onMoveWaypoint}
 					onClearWaypoints={onClearWaypoints}
 				/>
 				<div className="sidebar-divider" />

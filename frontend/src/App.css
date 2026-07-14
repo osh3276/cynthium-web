@@ -881,3 +881,112 @@ select.field-input option {
 	stroke: var(--bg);
 	stroke-width: 2px;
 }
+
+/* ===== Waypoint list / editing UI ===== */
+.waypoint-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	margin-bottom: 4px;
+	max-height: 200px;
+	overflow-y: auto;
+}
+
+.waypoint-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 4px;
+	border-radius: 3px;
+	font-size: 11px;
+	font-family: var(--font-mono, monospace);
+}
+
+.waypoint-row:hover {
+	background: rgba(255,255,255,0.05);
+}
+
+.waypoint-idx {
+	color: var(--cyan);
+	min-width: 22px;
+	cursor: pointer;
+	user-select: none;
+}
+
+.waypoint-idx:hover {
+	text-decoration: underline;
+}
+
+.waypoint-coords {
+	color: var(--text-dim);
+	flex: 1;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.waypoint-edit {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex: 1;
+}
+
+.waypoint-edit .field-input {
+	font-size: 10px;
+	padding: 1px 3px;
+	width: 55px;
+}
+
+.waypoint-comma {
+	color: var(--text-dim);
+	font-size: 10px;
+}
+
+.waypoint-actions {
+	display: flex;
+	align-items: center;
+	gap: 1px;
+	margin-left: auto;
+}
+
+.panel-button-icon {
+	background: none;
+	border: none;
+	color: var(--text-dim);
+	cursor: pointer;
+	font-size: 9px;
+	padding: 0 2px;
+	line-height: 1;
+	opacity: 0.5;
+	transition: opacity 0.15s;
+}
+
+.panel-button-icon:hover:not(:disabled) {
+	opacity: 1;
+	color: var(--text-bright);
+}
+
+.panel-button-icon:disabled {
+	opacity: 0.15;
+	cursor: default;
+}
+
+.panel-button-xs {
+	background: var(--bg-lighter);
+	border: 1px solid var(--border);
+	color: var(--text-bright);
+	cursor: pointer;
+	font-size: 10px;
+	padding: 0 5px;
+	line-height: 1.4;
+	border-radius: 3px;
+}
+
+.panel-button-xs:hover {
+	background: var(--bg-light);
+}
+
+.export-buttons {
+	gap: 6px;
+}

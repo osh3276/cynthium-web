@@ -105,7 +105,26 @@ function App() {
 	);
 
 	const handleRemoveWaypoint = useCallback((index: number) => {
-		setWaypoints((prev) => prev.filter((_, i) => i !== index));
+			setWaypoints((prev) => prev.filter((_, i) => i !== index));
+			setAutodesignResult(null);
+		}, []);
+
+	const handleUpdateWaypoint = useCallback((index: number, wp: Waypoint) => {
+		setWaypoints((prev) => {
+			const next = [...prev];
+			next[index] = wp;
+			return next;
+		});
+		setAutodesignResult(null);
+	}, []);
+
+	const handleMoveWaypoint = useCallback((fromIndex: number, toIndex: number) => {
+		setWaypoints((prev) => {
+			const next = [...prev];
+			const [moved] = next.splice(fromIndex, 1);
+			next.splice(toIndex, 0, moved);
+			return next;
+		});
 		setAutodesignResult(null);
 	}, []);
 
@@ -305,6 +324,7 @@ function App() {
 							waypoints={waypoints}
 							autodesignResult={autodesignResult}
 							onAddWaypoint={handleAddWaypoint}
+							onUpdateWaypoint={handleUpdateWaypoint}
 							gameStartPoint={null}
 							gameEndPoint={null}
 							manualStats={manualStats}
@@ -336,6 +356,8 @@ function App() {
 						waypoints={waypoints}
 						onAddWaypoint={handleAddWaypoint}
 						onRemoveWaypoint={handleRemoveWaypoint}
+						onUpdateWaypoint={handleUpdateWaypoint}
+						onMoveWaypoint={handleMoveWaypoint}
 						onClearWaypoints={handleClearWaypoints}
 						onAutodesign={handleAutodesign}
 						autodesignRunning={autodesignRunning}
