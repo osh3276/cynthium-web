@@ -1,4 +1,4 @@
-import type { GameRound } from "../types";
+import type { GameRound } from "../../types";
 
 interface ScoreEntry {
 	round: number;

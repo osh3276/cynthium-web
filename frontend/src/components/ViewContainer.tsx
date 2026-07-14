@@ -10,30 +10,32 @@ import type {
 import type { LoadStatus } from "../App";
 
 interface Props {
-	mapData: MapPayload | null;
-	status: LoadStatus;
-	waypoints: Waypoint[];
-	autodesignResult: AutodesignResult | null;
-	onAddWaypoint: (wp: Waypoint) => void;
-	gameStartPoint?: Waypoint | null;
-	gameEndPoint?: Waypoint | null;
-	manualStats: SimulationStats | null;
-	autoStats: SimulationStats | null;
-	onAnimationsComplete?: () => void;
-}
+		mapData: MapPayload | null;
+		status: LoadStatus;
+		waypoints: Waypoint[];
+		autodesignResult: AutodesignResult | null;
+		onAddWaypoint: (wp: Waypoint) => void;
+		onUpdateWaypoint?: (index: number, wp: Waypoint) => void;
+		gameStartPoint?: Waypoint | null;
+		gameEndPoint?: Waypoint | null;
+		manualStats: SimulationStats | null;
+		autoStats: SimulationStats | null;
+		onAnimationsComplete?: () => void;
+	}
 
 export default function ViewContainer({
-	mapData,
-	status,
-	waypoints,
-	autodesignResult,
-	onAddWaypoint,
-	gameStartPoint,
-	gameEndPoint,
-	manualStats,
-	autoStats,
-	onAnimationsComplete,
-}: Props) {
+		mapData,
+		status,
+		waypoints,
+		autodesignResult,
+		onAddWaypoint,
+		onUpdateWaypoint,
+		gameStartPoint,
+		gameEndPoint,
+		manualStats,
+		autoStats,
+		onAnimationsComplete,
+	}: Props) {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const [splitPos, setSplitPos] = useState(50);
 
@@ -71,6 +73,7 @@ export default function ViewContainer({
 					waypoints={waypoints}
 					autodesignResult={autodesignResult}
 					onAddWaypoint={onAddWaypoint}
+					onUpdateWaypoint={onUpdateWaypoint}
 					gameStartPoint={gameStartPoint}
 					gameEndPoint={gameEndPoint}
 					manualStats={manualStats}

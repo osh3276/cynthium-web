@@ -1,5 +1,5 @@
-import type { SimulationStats } from "../types";
-import { getFailureReason } from "../utils/failureReason";
+import type { SimulationStats } from "../../types";
+import { getFailureReason } from "../../utils/failureReason";
 
 interface ScoreRow {
 		label: string;
