@@ -215,14 +215,17 @@ export default function MapView({
 			const dx = e.clientX - panStart.current.x;
 			const dy = e.clientY - panStart.current.y;
 
-			// If dragging a waypoint, update its temporary position
-			if (dragWpIndex.current != null && (Math.abs(dx) > 2 || Math.abs(dy) > 2)) {
-				panning.current = true;
-				const wp = screenToWorld(e.clientX, e.clientY);
-				if (wp) {
-					setDragWpPos(wp);
+			// If dragging a waypoint, update its temporary position — never fall through to panning
+			if (dragWpIndex.current != null) {
+				if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+					panning.current = true;
+					const wp = screenToWorld(e.clientX, e.clientY);
+					if (wp) {
+						setDragWpPos(wp);
+					}
+					panStart.current = { x: e.clientX, y: e.clientY };
 				}
-				panStart.current = { x: e.clientX, y: e.clientY };
+				// Even with tiny movement, return early to prevent map from panning
 				return;
 			}
 
