@@ -52,6 +52,11 @@ export default function MapView({
 	const [imgNatural, setImgNatural] = useState({ w: 1, h: 1 });
 	const [imgLoaded, setImgLoaded] = useState(false);
 
+	// Hidden canvas for pixel-value reading
+	const pixelCanvasRef = useRef<HTMLCanvasElement | null>(null);
+	const [hoverValue, setHoverValue] = useState<{ val: number; label: string } | null>(null);
+	const hoverTimerRef = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
+
 	// Pan / zoom state - refs avoid re-renders during interaction
 	const pos = useRef({ x: 0, y: 0 });
 	const scale = useRef(1);
@@ -77,6 +82,15 @@ export default function MapView({
 				imgRef.current = img;
 				setImgNatural({ w: img.naturalWidth, h: img.naturalHeight });
 				setImgLoaded(true);
+				// Draw to hidden canvas for pixel reading
+				const cvs = document.createElement("canvas");
+				cvs.width = img.naturalWidth;
+				cvs.height = img.naturalHeight;
+				const ctx = cvs.getContext("2d");
+				if (ctx) {
+					ctx.drawImage(img, 0, 0);
+					pixelCanvasRef.current = cvs;
+				}
 			};
 			img.src = src;
 		} else if (status === "loading") {
@@ -145,31 +159,31 @@ export default function MapView({
 	}, [applyTransform]);
 
 	const screenToWorld = useCallback(
-		(clientX: number, clientY: number) => {
-			const rect = containerRef.current?.getBoundingClientRect();
-			if (!rect || !mapData) return null;
-			const wx = clientX - rect.left;
-			const wy = clientY - rect.top;
-			const { x, y } = pos.current;
-			const s = scale.current;
-			const imgX = (wx - x) / s;
-			const imgY = (wy - y) / s;
-			if (
-				imgX < 0 ||
-				imgX > imgNatural.w ||
-				imgY < 0 ||
-				imgY > imgNatural.h
-			)
-				return null;
-			const b = mapData.bounds;
-			const worldX = b.left + (imgX / imgNatural.w) * (b.right - b.left);
-			const worldY =
-				b.bottom +
-				((imgNatural.h - imgY) / imgNatural.h) * (b.top - b.bottom);
-			return { x: worldX, y: worldY };
-		},
-		[mapData, imgNatural],
-	);
+			(clientX: number, clientY: number) => {
+				const rect = containerRef.current?.getBoundingClientRect();
+				if (!rect || !mapData) return null;
+				const wx = clientX - rect.left;
+				const wy = clientY - rect.top;
+				const { x, y } = pos.current;
+				const s = scale.current;
+				const imgX = (wx - x) / s;
+				const imgY = (wy - y) / s;
+				if (
+					imgX < 0 ||
+					imgX > imgNatural.w ||
+					imgY < 0 ||
+					imgY > imgNatural.h
+				)
+					return null;
+				const b = mapData.bounds;
+				const worldX = b.left + (imgX / imgNatural.w) * (b.right - b.left);
+				const worldY =
+					b.bottom +
+					((imgNatural.h - imgY) / imgNatural.h) * (b.top - b.bottom);
+				return { x: worldX, y: worldY, imgX, imgY };
+			},
+			[mapData, imgNatural],
+		);
 
 	const worldToPixel = useCallback(
 		(worldX: number, worldY: number) => {
@@ -209,13 +223,58 @@ export default function MapView({
 		(e.target as HTMLElement).setPointerCapture(e.pointerId);
 	}, [screenToWorld, mapData, waypoints, onUpdateWaypoint]);
 
+	const readPixelValue = useCallback(
+		(imgX: number, imgY: number) => {
+			if (!mapData) return;
+			const cvs = pixelCanvasRef.current;
+			const ctx = cvs?.getContext("2d");
+			if (!cvs || !ctx) return;
+			const px = Math.round(imgX);
+			const py = Math.round(imgY);
+			if (px < 0 || px >= cvs.width || py < 0 || py >= cvs.height) return;
+			const [dmin, dmax] = mapData.value_range;
+			const drange = dmax - dmin || 1;
+
+			// For elevation, use exact height_data
+			if (mapData.height_data && mapData.label === "Elevation") {
+				const shape = mapData.shape;
+				const col = Math.round((imgX / imgNatural.w) * shape[1]);
+				const row = Math.round((imgY / imgNatural.h) * shape[0]);
+				const clampedCol = Math.max(0, Math.min(shape[1] - 1, col));
+				const clampedRow = Math.max(0, Math.min(shape[0] - 1, row));
+				const val = mapData.height_data[clampedRow]?.[clampedCol];
+				if (val != null && isFinite(val)) {
+					setHoverValue({ val, label: "m" });
+					return;
+				}
+			}
+
+			// Fallback: read pixel from canvas and estimate via brightness
+			const p = ctx.getImageData(px, py, 1, 1).data;
+			// Weighted brightness approximates the normalized value
+			const bright = (0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]) / 255;
+			const val = dmin + bright * drange;
+			const label = mapData.label === "Elevation"
+				? "m"
+				: mapData.label.includes("Slope")
+					? "°"
+					: mapData.label.includes("Temperature")
+						? "°C"
+						: mapData.label.includes("Illumination")
+							? "W/m²"
+							: "";
+			setHoverValue({ val, label });
+		},
+		[mapData, imgNatural],
+	);
+
 	const onPointerMove = useCallback(
 		(e: React.PointerEvent) => {
 			if (!pointerActive.current) return;
 			const dx = e.clientX - panStart.current.x;
 			const dy = e.clientY - panStart.current.y;
 
-			// If dragging a waypoint, update its temporary position — never fall through to panning
+			// If dragging a waypoint, update its temporary position
 			if (dragWpIndex.current != null) {
 				if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
 					panning.current = true;
@@ -237,14 +296,38 @@ export default function MapView({
 			pos.current.y += dy;
 			panStart.current = { x: e.clientX, y: e.clientY };
 			applyTransform();
+			setHoverValue(null);
 		},
 		[applyTransform, screenToWorld],
+	);
+
+	// Separate hover handler — fires on mouse move without pressing
+	const onMouseMove = useCallback(
+		(e: React.MouseEvent) => {
+			if (pointerActive.current) return; // don't double-handle during drag
+			if (hoverTimerRef.current == null) {
+				hoverTimerRef.current = requestAnimationFrame(() => {
+					hoverTimerRef.current = null;
+					const wp = screenToWorld(e.clientX, e.clientY);
+					if (wp) {
+						readPixelValue(wp.imgX, wp.imgY);
+					} else {
+						setHoverValue(null);
+					}
+				});
+			}
+		},
+		[screenToWorld, readPixelValue],
 	);
 
 	const onPointerUp = useCallback(
 		(e: React.PointerEvent) => {
 			pointerActive.current = false;
 			(e.target as HTMLElement).releasePointerCapture(e.pointerId);
+			if (hoverTimerRef.current) {
+				cancelAnimationFrame(hoverTimerRef.current);
+				hoverTimerRef.current = null;
+			}
 
 			// Finalize waypoint drag
 			if (dragWpIndex.current != null && dragWpPos && panning.current && onUpdateWaypoint) {
@@ -268,6 +351,11 @@ export default function MapView({
 		},
 		[screenToWorld, onAddWaypoint, onUpdateWaypoint, dragWpPos],
 	);
+
+	// Clear hover value when map data changes
+	useEffect(() => {
+		setHoverValue(null);
+	}, [mapData]);
 
 	// Throttled overlay display
 	const [displayScale, setDisplayScale] = useState(1);
@@ -338,6 +426,8 @@ export default function MapView({
 			onPointerDown={onPointerDown}
 			onPointerMove={onPointerMove}
 			onPointerUp={onPointerUp}
+			onMouseMove={onMouseMove}
+			onMouseLeave={() => { setHoverValue(null); }}
 			style={{ touchAction: "none", cursor: "grab" }}
 		>
 			{status === "idle" && (
@@ -741,6 +831,11 @@ export default function MapView({
 							{mapData.label} ({mapData.value_range[0].toFixed(1)}{" "}
 							- {mapData.value_range[1].toFixed(1)}) ·{" "}
 							{displayScale.toFixed(1)}x · {displayWpCount} pts
+							{hoverValue && (
+								<div style={{ marginTop: 2, fontSize: 12, color: "#00d4ff", textTransform: "none" }}>
+									{hoverValue.val.toFixed(2)}{hoverValue.label}
+								</div>
+							)}
 						</div>
 					)}
 					{/* Velocity overlays */}

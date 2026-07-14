@@ -184,11 +184,13 @@ def _apply_colormap(norm: np.ndarray) -> np.ndarray:
 	return (np.clip(rgb, 0, 1) * 255).astype(np.uint8)
 
 
-def _data_to_png(data: np.ndarray, colormap: bool = True) -> str:
+def _data_to_png(data: np.ndarray, colormap: bool = True, vmin: float | None = None) -> str:
 	mask = np.isfinite(data)
 
 	if colormap:
 		dmin = float(np.min(data[mask])) if np.any(mask) else 0
+		if vmin is not None:
+			dmin = vmin
 		dmax = float(np.max(data[mask])) if np.any(mask) else 1
 		drange = dmax - dmin if dmax > dmin else 1.0
 		norm = np.clip((data - dmin) / drange, 0.0, 1.0)
@@ -261,7 +263,7 @@ def get_site_map(site_name: str, map_type: str = "Elevation") -> dict | None:
 			return None
 		data = illum
 		label = "Solar Illumination"
-		png = _data_to_png(data, colormap=True)
+		png = _data_to_png(data, colormap=True, vmin=0.0)
 
 	elif map_key in ("solar_illumination_day_avg",):
 		illum = site_data.get("illumination")
@@ -269,7 +271,7 @@ def get_site_map(site_name: str, map_type: str = "Elevation") -> dict | None:
 			return None
 		data = illum
 		label = "Solar Illumination (day avg.)"
-		png = _data_to_png(data, colormap=True)
+		png = _data_to_png(data, colormap=True, vmin=0.0)
 
 	elif map_key == "meteor_flux":
 		meteor = site_data.get("meteor")
@@ -301,6 +303,10 @@ def get_site_map(site_name: str, map_type: str = "Elevation") -> dict | None:
 	mask = np.isfinite(data)
 	dmin = float(np.min(data[mask])) if np.any(mask) else 0
 	dmax = float(np.max(data[mask])) if np.any(mask) else 0
+
+	# Use 0 as floor for illumination so permanently shadowed areas render as dark
+	if "illumination" in map_key:
+		dmin = 0.0
 
 	payload: dict = {
 		"image_data": png,
