@@ -8,7 +8,6 @@ import type {
 	AutodesignResult,
 	AutodesignConfig,
 	RoverSettings,
-	GameState,
 } from "../types";
 
 interface Props {
@@ -24,11 +23,6 @@ interface Props {
 	autodesignResult: AutodesignResult | null;
 	roverSettings: RoverSettings;
 	onRoverChange: (settings: RoverSettings) => void;
-	gameState?: GameState | null;
-	gameStartPoint?: Waypoint | null;
-	gameEndPoint?: Waypoint | null;
-	onFinishPath?: () => void;
-	onNextRound?: () => void;
 	onStartGame?: () => void;
 	simulating?: boolean;
 }
@@ -36,7 +30,6 @@ interface Props {
 export default function Sidebar({
 	onLoadSite,
 	onChangeMapType,
-	onNextRound,
 	status,
 	waypoints,
 	onAddWaypoint,
@@ -47,12 +40,7 @@ export default function Sidebar({
 	autodesignResult,
 	roverSettings,
 	onRoverChange,
-	gameState,
-	gameStartPoint,
-	gameEndPoint,
-	onFinishPath,
 	onStartGame,
-	simulating,
 }: Props) {
 	const [slopeWeight, setSlopeWeight] = useState("0.3");
 	const [sunWeight, setSunWeight] = useState("0.3");
@@ -100,7 +88,6 @@ export default function Sidebar({
 					onChangeMapType={onChangeMapType}
 					status={status}
 					defaultDate="2026-05-13"
-					readOnly={!!gameState?.active}
 				/>
 				<div className="sidebar-divider" />
 				<PlanningPanel
@@ -113,196 +100,115 @@ export default function Sidebar({
 				<RoverSettingsPanel
 					settings={roverSettings}
 					onChange={onRoverChange}
-					readOnly={!!gameState?.active}
 				/>
-				{gameState?.active ? (
-					<>
-						<div className="sidebar-divider" />
-						<div className="panel">
-							<h3 className="panel-title">
-								Game — Round {gameState.currentRound + 1} of{" "}
-								{gameState.rounds.length}
-							</h3>
-							<div
-								className="field-row"
-								style={{
-									fontSize: 11,
-									color: "var(--text-dim)",
-									flexWrap: "wrap",
-								}}
-							>
-								<span>
-									{
-										gameState.rounds[gameState.currentRound]
-											?.siteName
-									}
-								</span>
-							</div>
-							<div
-								className="field-row"
-								style={{
-									fontSize: 11,
-									color: "var(--text-dim)",
-									flexWrap: "wrap",
-								}}
-							>
-								<span>
-									Start: ({gameStartPoint?.x.toFixed(1)},{" "}
-									{gameStartPoint?.y.toFixed(1)})
-								</span>
-								<br />
-								<span>
-									End: ({gameEndPoint?.x.toFixed(1)},{" "}
-									{gameEndPoint?.y.toFixed(1)})
-								</span>
-							</div>
-							<div
-								className="field-row"
-								style={{
-									fontSize: 11,
-									color: "var(--text-dim)",
-									marginBottom: 4,
-								}}
-							>
-								<span>
-									Waypoints placed: {waypoints.length}
-								</span>
-							</div>
-							{gameState.rounds[gameState.currentRound]
-								?.userStats ? (
-								<button
-									className="panel-button generate-button"
-									onClick={onNextRound}
-									style={{ marginTop: 4 }}
-								>
-									Next Round
-								</button>
-							) : (
-								<button
-									className="panel-button generate-button"
-									onClick={onFinishPath}
-									disabled={
-										waypoints.length < 2 || simulating
-									}
-									style={{ marginTop: 4 }}
-								>
-									{simulating ? "Scoring..." : "Finish Path"}
-								</button>
-							)}
-						</div>
-					</>
-				) : (
-					<>
-						<div className="sidebar-divider" />
-						<div className="panel">
-							<h3 className="panel-title">Autodesign</h3>
-							<div
-								className="field-row"
-								style={{
-									fontSize: 11,
-									color: "var(--text-dim)",
-									marginBottom: 4,
-								}}
-							>
-								Path optimized for current rover (μ=
-								{roverSettings.wheel_friction_coeff} → max climb{" "}
-								{Math.round(
-									(Math.atan(
-										roverSettings.wheel_friction_coeff,
-									) *
-										180) /
-										Math.PI,
-								)}
-								°)
-							</div>
-							<div className="field-row">
-								<label className="field-label">
-									Slope weight:
-								</label>
-								<input
-									className="field-input field-input-narrow"
-									type="text"
-									value={slopeWeight}
-									onChange={(e) =>
-										setSlopeWeight(e.target.value)
-									}
-								/>
-							</div>
-							<div className="field-row">
-								<label className="field-label">
-									Sun weight:
-								</label>
-								<input
-									className="field-input field-input-narrow"
-									type="text"
-									value={sunWeight}
-									onChange={(e) =>
-										setSunWeight(e.target.value)
-									}
-								/>
-							</div>
-							<div className="field-row">
-								<label className="field-label">
-									Meteor weight:
-								</label>
-								<input
-									className="field-input field-input-narrow"
-									type="text"
-									value={meteorWeight}
-									onChange={(e) =>
-										setMeteorWeight(e.target.value)
-									}
-								/>
-							</div>
+				<div className="sidebar-divider" />
+				<div className="panel">
+					<h3 className="panel-title">Autodesign</h3>
+					<div
+						className="field-row"
+						style={{
+							fontSize: 11,
+							color: "var(--text-dim)",
+							marginBottom: 4,
+						}}
+					>
+						Path optimized for current rover (μ=
+						{roverSettings.wheel_friction_coeff} → max climb{" "}
+						{Math.round(
+							(Math.atan(
+								roverSettings.wheel_friction_coeff,
+							) *
+								180) /
+								Math.PI,
+						)}
+						°)
+					</div>
+					<div className="field-row">
+						<label className="field-label">
+							Slope weight:
+						</label>
+						<input
+							className="field-input field-input-narrow"
+							type="text"
+							value={slopeWeight}
+							onChange={(e) =>
+								setSlopeWeight(e.target.value)
+							}
+						/>
+					</div>
+					<div className="field-row">
+						<label className="field-label">
+							Sun weight:
+						</label>
+						<input
+							className="field-input field-input-narrow"
+							type="text"
+							value={sunWeight}
+							onChange={(e) =>
+								setSunWeight(e.target.value)
+							}
+						/>
+					</div>
+					<div className="field-row">
+						<label className="field-label">
+							Meteor weight:
+						</label>
+						<input
+							className="field-input field-input-narrow"
+							type="text"
+							value={meteorWeight}
+							onChange={(e) =>
+								setMeteorWeight(e.target.value)
+							}
+						/>
+					</div>
 
-							<div className="field-row">
-								<label className="field-label">Path mode:</label>
-								<select
-									className="field-input"
-									value={pathMode}
-									onChange={(e) =>
-										setPathMode(
-											e.target.value as "segment" | "direct",
-										)
-									}
-								>
-									<option value="segment">Per-segment</option>
-									<option value="direct">Direct</option>
-								</select>
-								<button
-									className="panel-button panel-button-sm"
-									onClick={handleRun}
-									disabled={
-										autodesignRunning ||
-										waypoints.length < 2
-									}
-								>
-									{autodesignRunning ? "Running..." : "Run"}
-								</button>
-							</div>
+					<div className="field-row">
+						<label className="field-label">Path mode:</label>
+						<select
+							className="field-input"
+							value={pathMode}
+							onChange={(e) =>
+								setPathMode(
+									e.target.value as "segment" | "direct",
+								)
+							}
+						>
+							<option value="segment">Per-segment</option>
+							<option value="direct">Direct</option>
+						</select>
+						<button
+							className="panel-button panel-button-sm"
+							onClick={handleRun}
+							disabled={
+								autodesignRunning ||
+								waypoints.length < 2
+							}
+						>
+							{autodesignRunning ? "Running..." : "Run"}
+						</button>
+					</div>
 
-							<label className="field-label">
-								Autodesign path:
-							</label>
-							<textarea
-								className="field-textarea"
-								readOnly
-								value={autodesignLines}
-								placeholder="(autodesign output will appear here)"
-							/>
-						</div>
-						<div className="sidebar-divider" />
-						<div className="panel start-game-panel">
-							<button
-								className="panel-button generate-button"
-								onClick={onStartGame}
-								style={{ width: "100%" }}
-							>
-								Start Game
-							</button>
-						</div>
-					</>
-				)}
+					<label className="field-label">
+						Autodesign path:
+					</label>
+					<textarea
+						className="field-textarea"
+						readOnly
+						value={autodesignLines}
+						placeholder="(autodesign output will appear here)"
+					/>
+				</div>
+				<div className="sidebar-divider" />
+				<div className="panel start-game-panel">
+					<button
+						className="panel-button generate-button"
+						onClick={onStartGame}
+						style={{ width: "100%" }}
+					>
+						Start Game
+					</button>
+				</div>
 			</div>
 		</aside>
 	);
