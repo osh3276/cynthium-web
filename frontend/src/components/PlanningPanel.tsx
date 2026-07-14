@@ -1,6 +1,11 @@
 import { useCallback, useRef, useState } from "react";
 import type { Waypoint } from "../types";
 
+interface ParsedWP {
+	x: number;
+	y: number;
+}
+
 interface Props {
 	waypoints: Waypoint[];
 	onAddWaypoint: (wp: Waypoint) => void;
@@ -19,9 +24,11 @@ export default function PlanningPanel({
 	onClearWaypoints,
 }: Props) {
 	const coordRef = useRef<HTMLInputElement>(null);
+	const fileInputRef = useRef<HTMLInputElement>(null);
 	const [editingIdx, setEditingIdx] = useState<number | null>(null);
 	const [editX, setEditX] = useState("");
 	const [editY, setEditY] = useState("");
+	const [importError, setImportError] = useState<string | null>(null);
 
 	const handleAddCoord = useCallback(() => {
 		const val = coordRef.current?.value.trim();
@@ -110,6 +117,80 @@ export default function PlanningPanel({
 		a.click();
 		URL.revokeObjectURL(url);
 	}, [waypoints]);
+
+	const parseCSV = useCallback((text: string): ParsedWP[] => {
+		const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+		const result: ParsedWP[] = [];
+		for (let i = 0; i < lines.length; i++) {
+			const parts = lines[i].split(",").map((s) => s.trim());
+			// Skip header row if it starts with a non-numeric label
+			if (i === 0 && /^[a-z]/i.test(parts[0]) && parts.length >= 2) continue;
+			// Try last two numeric values as x,y (handles index,x,y or x,y)
+			const vals = parts.filter((p) => /^-?\d+\.?\d*$/.test(p)).map(Number);
+			if (vals.length >= 2) {
+				result.push({ x: vals[vals.length - 2], y: vals[vals.length - 1] });
+			}
+		}
+		return result;
+	}, []);
+
+	const parseJSON = useCallback((text: string): ParsedWP[] => {
+		const data = JSON.parse(text);
+		// Exported format: { type: "waypoints", waypoints: [{index, x, y}] }
+		if (data && Array.isArray(data.waypoints)) {
+			const valid: { x: number; y: number }[] = [];
+			for (const wp of data.waypoints) {
+				if (typeof wp.x === "number" && typeof wp.y === "number") {
+					valid.push({ x: wp.x, y: wp.y });
+				}
+			}
+			return valid;
+		}
+		// Plain array: [{x, y}]
+		if (Array.isArray(data)) {
+			const valid: { x: number; y: number }[] = [];
+			for (const wp of data) {
+				if (typeof wp.x === "number" && typeof wp.y === "number") {
+					valid.push({ x: wp.x, y: wp.y });
+				}
+			}
+			return valid;
+		}
+		throw new Error("Unrecognised JSON structure");
+	}, []);
+
+	const handleImport = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+		setImportError(null);
+		const file = e.target.files?.[0];
+		if (!file) return;
+		const reader = new FileReader();
+		reader.onload = () => {
+			const text = reader.result as string;
+			try {
+				let parsed: ParsedWP[];
+				if (file.name.endsWith(".json")) {
+					parsed = parseJSON(text);
+				} else {
+					parsed = parseCSV(text);
+				}
+				if (parsed.length === 0) {
+					setImportError("No valid waypoints found in file");
+					return;
+				}
+				parsed.forEach((wp) => onAddWaypoint(wp));
+			} catch (err) {
+				setImportError(err instanceof Error ? err.message : "Failed to parse file");
+			}
+		};
+		reader.readAsText(file);
+		// Reset so the same file can be re-imported
+		if (fileInputRef.current) fileInputRef.current.value = "";
+	}, [onAddWaypoint, parseCSV, parseJSON]);
+
+	const handleImportClick = useCallback(() => {
+		setImportError(null);
+		fileInputRef.current?.click();
+	}, []);
 
 	return (
 		<div className="panel">
@@ -234,11 +315,17 @@ export default function PlanningPanel({
 				</button>
 			</div>
 
-			{waypoints.length > 0 && (
-				<>
-					<div className="sidebar-divider" />
-					<label className="field-label">Export:</label>
-					<div className="field-row export-buttons">
+			<div className="sidebar-divider" />
+			<label className="field-label">Import / Export:</label>
+			<div className="field-row export-buttons">
+				<button
+					className="panel-button panel-button-sm"
+					onClick={handleImportClick}
+				>
+					Import
+				</button>
+				{waypoints.length > 0 && (
+					<>
 						<button
 							className="panel-button panel-button-sm"
 							onClick={handleExportCSV}
@@ -251,8 +338,20 @@ export default function PlanningPanel({
 						>
 							JSON
 						</button>
-					</div>
-				</>
+					</>
+				)}
+			</div>
+			<input
+				ref={fileInputRef}
+				type="file"
+				accept=".csv,.json"
+				onChange={handleImport}
+				style={{ display: "none" }}
+			/>
+			{importError && (
+				<div className="field-value-text" style={{ color: "var(--magenta)", fontSize: 10, marginTop: 2 }}>
+					{importError}
+				</div>
 			)}
 		</div>
 	);
