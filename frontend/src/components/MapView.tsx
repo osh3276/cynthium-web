@@ -15,6 +15,67 @@ import type {
 import type { LoadStatus } from "../App";
 import { useRoverAnimation } from "./useRoverAnimation";
 
+// Turbo colormap — 21 entries: [pos, R, G, B] with values in [0, 1]
+const TURBO_COLORMAP: [number, number, number, number][] = [
+	[0.000, 0.190, 0.073, 0.231],
+	[0.050, 0.137, 0.245, 0.569],
+	[0.100, 0.067, 0.392, 0.675],
+	[0.150, 0.030, 0.529, 0.698],
+	[0.200, 0.020, 0.655, 0.669],
+	[0.250, 0.038, 0.769, 0.603],
+	[0.300, 0.118, 0.865, 0.505],
+	[0.350, 0.252, 0.936, 0.382],
+	[0.400, 0.408, 0.976, 0.253],
+	[0.450, 0.565, 0.982, 0.155],
+	[0.500, 0.713, 0.957, 0.115],
+	[0.550, 0.840, 0.904, 0.124],
+	[0.600, 0.935, 0.828, 0.159],
+	[0.650, 0.987, 0.733, 0.190],
+	[0.700, 0.995, 0.624, 0.195],
+	[0.750, 0.966, 0.511, 0.176],
+	[0.800, 0.907, 0.397, 0.144],
+	[0.850, 0.826, 0.287, 0.115],
+	[0.900, 0.727, 0.185, 0.096],
+	[0.950, 0.614, 0.104, 0.086],
+	[1.000, 0.500, 0.050, 0.087],
+];
+
+// Build a dense reverse lookup: for each RGB triplet (0-255), precompute closest normalized value
+const TURBO_LUT_SIZE = 256;
+const TURBO_LUT: { r: number; g: number; b: number; norm: number }[] = [];
+for (let i = 0; i < TURBO_LUT_SIZE; i++) {
+	const t = i / (TURBO_LUT_SIZE - 1);
+	// Find the two surrounding entries
+	let lo = 0;
+	while (lo < TURBO_COLORMAP.length - 2 && TURBO_COLORMAP[lo + 1][0] <= t) lo++;
+	const hi = lo + 1;
+	const [posLo, rLo, gLo, bLo] = TURBO_COLORMAP[lo];
+	const [posHi, rHi, gHi, bHi] = TURBO_COLORMAP[hi];
+	const frac = (t - posLo) / (posHi - posLo || 1);
+	TURBO_LUT.push({
+		r: Math.round(((rLo + (rHi - rLo) * frac)) * 255),
+		g: Math.round(((gLo + (gHi - gLo) * frac)) * 255),
+		b: Math.round(((bLo + (bHi - bLo) * frac)) * 255),
+		norm: t,
+	});
+}
+
+function turboNormFromRGB(r: number, g: number, b: number): number {
+	let best = 0;
+	let bestDist = Infinity;
+	for (let i = 0; i < TURBO_LUT_SIZE; i++) {
+		const dr = r - TURBO_LUT[i].r;
+		const dg = g - TURBO_LUT[i].g;
+		const db = b - TURBO_LUT[i].b;
+		const d = dr * dr + dg * dg + db * db;
+		if (d < bestDist) {
+			bestDist = d;
+			best = TURBO_LUT[i].norm;
+		}
+	}
+	return best;
+}
+
 /** Scale factor for animation speed (30x real-time so it's visible in a few seconds). */
 const ROVER_ANIMATION_SPEED = 30;
 
@@ -249,11 +310,10 @@ export default function MapView({
 				}
 			}
 
-			// Fallback: read pixel from canvas and estimate via brightness
+			// Fallback: read pixel from canvas and reverse-lookup through Turbo colormap
 			const p = ctx.getImageData(px, py, 1, 1).data;
-			// Weighted brightness approximates the normalized value
-			const bright = (0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2]) / 255;
-			const val = dmin + bright * drange;
+			const norm = turboNormFromRGB(p[0], p[1], p[2]);
+			const val = dmin + norm * drange;
 			const label = mapData.label === "Elevation"
 				? "m"
 				: mapData.label.includes("Slope")
