@@ -79,6 +79,10 @@ export async function generateRoundPoints(
 								ARTEMIS_SR.wheel_friction_coeff,
 							rover_crr:
 								ARTEMIS_SR.rolling_resistance_coeff,
+							rover_battery_capacity_wh:
+								ARTEMIS_SR.battery_capacity_wh,
+							rover_idle_drain_w:
+								ARTEMIS_SR.idle_drain_w,
 							max_attempts: 1,
 						}),
 					},
@@ -116,6 +120,8 @@ export function autoBody(waypoints_xy: number[][]): string {
 		rover_power_hp: ARTEMIS_SR.power_hp,
 		rover_friction_coeff: ARTEMIS_SR.wheel_friction_coeff,
 		rover_crr: ARTEMIS_SR.rolling_resistance_coeff,
+		rover_battery_capacity_wh: ARTEMIS_SR.battery_capacity_wh,
+		rover_idle_drain_w: ARTEMIS_SR.idle_drain_w,
 	});
 }
 
@@ -127,6 +133,8 @@ export function simBody(path_xy: [number, number][]): string {
 		rover_power_hp: ARTEMIS_SR.power_hp,
 		rover_friction_coeff: ARTEMIS_SR.wheel_friction_coeff,
 		rover_crr: ARTEMIS_SR.rolling_resistance_coeff,
+		rover_battery_capacity_wh: ARTEMIS_SR.battery_capacity_wh,
+		rover_idle_drain_w: ARTEMIS_SR.idle_drain_w,
 	});
 }
 

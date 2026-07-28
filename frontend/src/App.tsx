@@ -162,6 +162,8 @@ function App() {
 							rover_power_hp: config.rover_power_hp,
 							rover_friction_coeff: config.rover_friction_coeff,
 							rover_crr: config.rover_crr,
+							rover_battery_capacity_wh: 500.0,
+							rover_idle_drain_w: 10.0,
 						}),
 					},
 				);
@@ -199,6 +201,8 @@ function App() {
 				rover_power_hp: rover.power_hp,
 				rover_friction_coeff: rover.wheel_friction_coeff,
 				rover_crr: rover.rolling_resistance_coeff,
+				rover_battery_capacity_wh: rover.battery_capacity_wh,
+				rover_idle_drain_w: rover.idle_drain_w,
 			});
 
 		const run = async (

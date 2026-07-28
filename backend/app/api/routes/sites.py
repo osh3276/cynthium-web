@@ -11,24 +11,28 @@ router = APIRouter(prefix="/sites", tags=["sites"])
 
 
 class AutodesignRequest(BaseModel):
-		waypoints_xy: list[list[float]]
-		slope_weight: float = 0.3
-		sun_weight: float = 0.3
-		meteor_weight: float = 0.05
-		path_mode: str = "segment"
+			waypoints_xy: list[list[float]]
+			slope_weight: float = 0.3
+			sun_weight: float = 0.3
+			meteor_weight: float = 0.05
+			path_mode: str = "segment"
+			rover_mass_kg: float = 150.0
+			rover_power_hp: float = 0.2
+			rover_friction_coeff: float = 0.6
+			rover_crr: float = 0.1
+			rover_battery_capacity_wh: float = 500.0
+			rover_idle_drain_w: float = 10.0
+			max_attempts: int = 10
+
+
+class SimulateRequest(BaseModel):
+		path_xy: list[list[float]]
 		rover_mass_kg: float = 150.0
 		rover_power_hp: float = 0.2
 		rover_friction_coeff: float = 0.6
 		rover_crr: float = 0.1
-		max_attempts: int = 10
-
-
-class SimulateRequest(BaseModel):
-	path_xy: list[list[float]]
-	rover_mass_kg: float = 150.0
-	rover_power_hp: float = 0.2
-	rover_friction_coeff: float = 0.6
-	rover_crr: float = 0.1
+		rover_battery_capacity_wh: float = 500.0
+		rover_idle_drain_w: float = 10.0
 
 
 @router.get("")
@@ -74,6 +78,8 @@ async def site_autodesign(site_name: str, req: AutodesignRequest):
 	    rover_power_hp=req.rover_power_hp,
 	    rover_friction_coeff=req.rover_friction_coeff,
 	    rover_crr=req.rover_crr,
+	    rover_battery_capacity_wh=req.rover_battery_capacity_wh,
+	    rover_idle_drain_w=req.rover_idle_drain_w,
 	    max_attempts=req.max_attempts,
 	)
 	if "error" in result:
@@ -94,6 +100,8 @@ async def site_simulate(site_name: str, req: SimulateRequest):
 			power_hp=req.rover_power_hp,
 			wheel_friction_coeff=req.rover_friction_coeff,
 			rolling_resistance_coeff=req.rover_crr,
+			battery_capacity_wh=req.rover_battery_capacity_wh,
+			idle_drain_w=req.rover_idle_drain_w,
 		)
 		rover.validate()
 		stats = run_simulation(site_name, req.path_xy, rover)

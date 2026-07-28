@@ -9,10 +9,16 @@ class RoverSettings:
 	power_hp: float
 	wheel_friction_coeff: float
 	rolling_resistance_coeff: float
+	battery_capacity_wh: float = 500.0
+	idle_drain_w: float = 10.0
 
 	@property
 	def power_w(self) -> float:
 		return float(self.power_hp) * _HP_TO_W
+
+	@property
+	def battery_capacity_j(self) -> float:
+		return self.battery_capacity_wh * 3600.0
 
 	def validate(self):
 		if not (self.mass_kg > 0):

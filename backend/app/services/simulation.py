@@ -107,12 +107,17 @@ def simulate_rover_over_path(
             "solar_energy_per_m2_j": 0.0,
             "avg_solar_illumination_w_per_m2": 0.0,
             "path_velocity_profile": [],
+            "battery_energy_used_j": 0.0,
+            "battery_remaining_pct": 100.0,
+            "battery_capacity_wh": float(rover.battery_capacity_wh),
         }
 
     m = float(rover.mass_kg)
     mu = float(wheel_friction_coeff)
     p_w = float(power_w)
     g = float(g_mps2)
+    idle_w = float(rover.idle_drain_w)
+    batt_cap_j = float(rover.battery_capacity_j)
 
     diffs = np.diff(pts_xyz.astype(np.float64, copy=False), axis=0)
     ds = np.linalg.norm(diffs, axis=1).astype(np.float64)
@@ -127,6 +132,9 @@ def simulate_rover_over_path(
     illum_map: np.ndarray | None = illumination_map
     if illum_map is not None and illumination_transform is not None:
         inv_illum = ~illumination_transform
+
+    # Battery state
+    battery_energy_used_j = 0.0
 
     # Per-point velocity profile: [x, y, v] for every point in pts_xyz
     velocity_profile: list[list[float]] = []
@@ -194,6 +202,9 @@ def simulate_rover_over_path(
                         if np.isfinite(illum):
                             energy_j_per_m2 += illum * float(dt)
                 velocity_profile.append([failure_xy[0], failure_xy[1], 0.0])
+            # Battery drain during failure (idle drain for time spent)
+            battery_energy_used_j += idle_w * dt
+            batt_remaining_pct = max(0.0, (batt_cap_j - battery_energy_used_j) / max(batt_cap_j, 1.0) * 100.0) if batt_cap_j > 0 else 100.0
             min_v = min(min_v, 0.0)
             max_v = max(max_v, float(v))
             return {
@@ -205,7 +216,11 @@ def simulate_rover_over_path(
                 "solar_energy_per_m2_j": float(energy_j_per_m2),
                 "avg_solar_illumination_w_per_m2": 0.0,
                 "failure_xy": failure_xy,
+                "failure_reason": "Battery depleted" if battery_energy_used_j >= batt_cap_j else "Route is dynamically infeasible for the current rover settings.",
                 "path_velocity_profile": velocity_profile,
+                "battery_energy_used_j": float(battery_energy_used_j),
+                "battery_remaining_pct": float(batt_remaining_pct),
+                "battery_capacity_wh": float(rover.battery_capacity_wh),
             }
 
         v_next = float(np.sqrt(v_sq_next))
@@ -231,6 +246,30 @@ def simulate_rover_over_path(
                 if np.isfinite(illum):
                     energy_j_per_m2 += illum * float(dt)
 
+        # Battery drain for this segment: idle + driving power used
+        p_used = f_drive * v_eff if f_drive > 0 else 0.0
+        battery_energy_used_j += (idle_w + p_used) * dt
+        if battery_energy_used_j >= batt_cap_j:
+            failure_xy = [float(pts_xyz[i + 1, 0]), float(pts_xyz[i + 1, 1])]
+            velocity_profile[-1][2] = 0.0  # mark this point as stopped
+            batt_remaining_pct = 0.0
+            min_v = min(min_v, 0.0)
+            return {
+                "traverse_feasible": 0.0,
+                "traversal_time_s": float("inf"),
+                "average_velocity_mps": 0.0,
+                "min_velocity_mps": 0.0,
+                "max_velocity_mps": float(max_v),
+                "solar_energy_per_m2_j": float(energy_j_per_m2),
+                "avg_solar_illumination_w_per_m2": 0.0,
+                "failure_xy": failure_xy,
+                "failure_reason": "Battery depleted",
+                "path_velocity_profile": velocity_profile,
+                "battery_energy_used_j": float(battery_energy_used_j),
+                "battery_remaining_pct": float(batt_remaining_pct),
+                "battery_capacity_wh": float(rover.battery_capacity_wh),
+            }
+
         v = v_next
         # Record velocity at the end of this segment (point i+1)
         velocity_profile.append([float(pts_xyz[i + 1, 0]), float(pts_xyz[i + 1, 1]), v])
@@ -245,6 +284,8 @@ def simulate_rover_over_path(
     if min_v == float("inf"):
         min_v = 0.0
 
+    batt_remaining_pct = max(0.0, (batt_cap_j - battery_energy_used_j) / max(batt_cap_j, 1.0) * 100.0) if batt_cap_j > 0 else 100.0
+
     return {
         "traverse_feasible": 1.0,
         "traversal_time_s": float(t_total),
@@ -254,6 +295,9 @@ def simulate_rover_over_path(
         "solar_energy_per_m2_j": float(energy_j_per_m2),
         "avg_solar_illumination_w_per_m2": float(avg_illum),
         "path_velocity_profile": velocity_profile,
+        "battery_energy_used_j": float(battery_energy_used_j),
+        "battery_remaining_pct": float(batt_remaining_pct),
+        "battery_capacity_wh": float(rover.battery_capacity_wh),
     }
 
 
@@ -332,6 +376,9 @@ def compute_traversal_dynamics(
             "traverse_feasible": 1.0,
             "required_wheel_friction_coeff": 0.0,
             "required_climb_slope_deg": 0.0,
+            "battery_energy_used_j": 0.0,
+            "battery_remaining_pct": 100.0,
+            "battery_capacity_wh": float(rover.battery_capacity_wh),
         }
 
     if elevation_map is not None and transform is not None:
@@ -383,7 +430,11 @@ def compute_traversal_dynamics(
         "required_climb_slope_deg": float(np.degrees(np.arctan(required_mu_dynamic))),
     }
     if float(physics["traverse_feasible"]) < 0.5:
-        if np.isfinite(required_mu_dynamic) and required_mu_dynamic > mu + 1e-3:
+        # Use failure_reason from physics (e.g. "Battery depleted") if set
+        physics_reason = physics.get("failure_reason")
+        if physics_reason:
+            result["failure_reason"] = physics_reason
+        elif np.isfinite(required_mu_dynamic) and required_mu_dynamic > mu + 1e-3:
             result["failure_reason"] = (
                 "Insufficient traction for slope: "
                 f"requires wheel friction μ >= {required_mu_dynamic:.2f}, "
@@ -401,6 +452,12 @@ def compute_traversal_dynamics(
     # Pass through velocity profile for frontend animation
     if "path_velocity_profile" in physics:
         result["path_velocity_profile"] = physics["path_velocity_profile"]
+    # Pass through battery stats
+    for key in ("battery_energy_used_j", "battery_remaining_pct", "battery_capacity_wh"):
+        if key in physics:
+            result[key] = physics[key]
+        else:
+            result[key] = 0.0 if key != "battery_capacity_wh" else float(rover.battery_capacity_wh)
     return result
 
 

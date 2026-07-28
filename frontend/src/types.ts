@@ -61,6 +61,8 @@ export interface RoverSettings {
 	power_hp: number;
 	wheel_friction_coeff: number;
 	rolling_resistance_coeff: number;
+	battery_capacity_wh: number;
+	idle_drain_w: number;
 }
 
 export interface TraversalSubscores {

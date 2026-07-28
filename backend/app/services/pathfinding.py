@@ -244,6 +244,8 @@ def compute_autodesign(
     rover_power_hp: float = 0.2,
     rover_friction_coeff: float = 0.6,
     rover_crr: float = 0.1,
+    rover_battery_capacity_wh: float = 500.0,
+    rover_idle_drain_w: float = 10.0,
     max_attempts: int = 10,
 ) -> dict:
     """Compute a path and validate it via simulation with the rover params."""
@@ -315,7 +317,6 @@ def compute_autodesign(
                     all_xy.extend(seg)
                 else:
                     all_xy.extend(seg[1:])
-
         if len(all_xy) < 2:
             return {"error": "Combined path too short"}
 
@@ -327,6 +328,8 @@ def compute_autodesign(
             power_hp=rover_power_hp,
             wheel_friction_coeff=rover_friction_coeff,
             rolling_resistance_coeff=rover_crr,
+            battery_capacity_wh=rover_battery_capacity_wh,
+            idle_drain_w=rover_idle_drain_w,
         )
         try:
             result = run_simulation(site_name, site_path_xy, rover)
