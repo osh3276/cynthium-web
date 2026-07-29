@@ -1,4 +1,4 @@
-import type { AutodesignResult, GameRound, Waypoint } from "../types";
+import type { AutodesignResult, GameRound, SimulationStats, Waypoint } from "../types";
 import { ARTEMIS_SR } from "./roverPresets";
 import { randInRange, sampleElevation } from "./utils";
 
@@ -143,6 +143,25 @@ export function autoBody(waypoints_xy: number[][]): string {
 	});
 }
 
+/** Simulate a path segment and return stats, or null on failure */
+export async function simulateSegment(
+	siteName: string,
+	path_xy: [number, number][],
+): Promise<SimulationStats | null> {
+	try {
+		const res = await fetch(
+			`/api/sites/${encodeURIComponent(siteName)}/simulate`,
+			{
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: simBody(path_xy),
+			},
+		);
+		if (!res.ok) return null;
+		return await res.json();
+	} catch { return null; }
+}
+
 /** Build request body for the game's simulate calls */
 export function simBody(path_xy: [number, number][]): string {
 	return JSON.stringify({
@@ -159,8 +178,57 @@ export function simBody(path_xy: [number, number][]): string {
 }
 
 /**
+ * Extract auto path sub-segment between two waypoints.
+ * Finds the closest indices in path_xy to each waypoint and returns the sub-path.
+ */
+function extractAutoSegment(
+	path_xy: number[][],
+	wpA: Waypoint,
+	wpB: Waypoint,
+): [number, number][] {
+	const distSq = (px: number, py: number, wx: number, wy: number) =>
+		(px - wx) ** 2 + (py - wy) ** 2;
+
+	let idxA = 0;
+	let minA = Infinity;
+	for (let i = 0; i < path_xy.length; i++) {
+		const d = distSq(path_xy[i][0], path_xy[i][1], wpA.x, wpA.y);
+		if (d < minA) { minA = d; idxA = i; }
+	}
+
+	let idxB = idxA;
+	let minB = Infinity;
+	for (let i = idxA; i < path_xy.length; i++) {
+		const d = distSq(path_xy[i][0], path_xy[i][1], wpB.x, wpB.y);
+		if (d < minB) { minB = d; idxB = i; }
+	}
+
+	return path_xy.slice(idxA, idxB + 1) as [number, number][];
+}
+
+/**
+ * Find the user waypoint nearest to each required waypoint.
+ */
+export function findNearestUserWps(
+	required: Waypoint[],
+	userWaypoints: Waypoint[],
+): (Waypoint | null)[] {
+	return required.map((req) => {
+		let best: Waypoint | null = null;
+		let bestDist = Infinity;
+		for (const uwp of userWaypoints) {
+			const d = Math.hypot(uwp.x - req.x, uwp.y - req.y);
+			if (d < bestDist) { bestDist = d; best = uwp; }
+		}
+		return best;
+	});
+}
+
+/**
  * Pre-calculate autopath for a round (called during round loading,
  * results kept hidden until Finish Path).
+ * Simulates each segment between consecutive waypoints separately
+ * and stores per-segment scores.
  */
 export async function precalcRound(
 	round: GameRound,
@@ -179,25 +247,35 @@ export async function precalcRound(
 		);
 		if (!autoRes.ok) return;
 		const autoData: AutodesignResult = await autoRes.json();
-		if (autoData.path_xy.length >= 2) {
-			round.autoPath = autoData.path_xy;
-			if (autoData.simulation) {
-				round.autoStats = autoData.simulation;
-			} else {
-				const autoSimRes = await fetch(
-					`/api/sites/${encodeURIComponent(siteName)}/simulate`,
-					{
-						method: "POST",
-						headers: { "Content-Type": "application/json" },
-						body: simBody(
-							autoData.path_xy as [number, number][],
-						),
-					},
-				);
-				if (autoSimRes.ok) {
-					round.autoStats = await autoSimRes.json();
-				}
+		if (autoData.path_xy.length < 2) return;
+
+		// Store the combined path for display
+		round.autoPath = autoData.path_xy;
+
+		// Simulate each segment between consecutive waypoints separately
+		const wps = round.waypoints;
+		const segmentPromises: Promise<SimulationStats | null>[] = [];
+		for (let i = 0; i < wps.length - 1; i++) {
+			const segPath = extractAutoSegment(autoData.path_xy, wps[i], wps[i + 1]);
+			if (segPath.length >= 2) {
+				segmentPromises.push(simulateSegment(siteName, segPath));
 			}
 		}
+
+		if (segmentPromises.length === 0) return;
+
+		const segResults: (SimulationStats | null)[] = await Promise.all(segmentPromises);
+		const scores: number[] = segResults
+			.map((s: SimulationStats | null) => (s ? (s["traversal_score"] as number) || 0 : 0));
+		const avgScore: number =
+			scores.length > 0
+				? scores.reduce((a: number, b: number) => a + b, 0) / scores.length
+				: 0;
+
+		// Use the FIRST segment's stats for display (velocity profile, etc.)
+		// and store the averaged score
+		const displayStats = segResults[0] || {};
+		displayStats["traversal_score"] = avgScore;
+		round.autoStats = displayStats as SimulationStats;
 	} catch {}
 }

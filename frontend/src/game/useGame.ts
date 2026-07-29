@@ -12,7 +12,7 @@ import type { LoadStatus } from "../App";
 import { SITE_PRESETS } from "../constants";
 import { CURIOSITY, ARTEMIS_SR } from "./roverPresets";
 import { shufflePick } from "./utils";
-import { generateRoundPoints, simBody, precalcRound } from "./api";
+import { generateRoundPoints, precalcRound, simulateSegment, findNearestUserWps } from "./api";
 
 interface UseGameDeps {
 	loadSiteMap: (siteName: string, mapType: string, date: string) => Promise<void>;
@@ -222,26 +222,69 @@ export function useGame(deps: UseGameDeps) {
 		setManualStats(null);
 
 		try {
-			const userRes = await fetch(
-				`/api/sites/${encodeURIComponent(currentSite)}/simulate`,
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: simBody(manualPath),
-				},
-			);
-			if (!userRes.ok) throw new Error(await userRes.text());
-			const userStats: SimulationStats = await userRes.json();
+			const required = round.waypoints;
+			const nearestWps = findNearestUserWps(required, waypoints);
 
-			round.userPath = waypoints;
-			round.userStats = userStats;
-			const userFeasible =
-				(userStats["traverse_feasible"] as number) >= 0.5;
+			// Simulate each segment between consecutive required waypoints
+			// using the nearest user waypoints as endpoints
+			const segmentPromises: Promise<SimulationStats | null>[] = [];
+			const segmentPaths: [number, number][][] = [];
+
+			for (let i = 0; i < required.length - 1; i++) {
+				const a = nearestWps[i];
+				const b = nearestWps[i + 1];
+				if (!a || !b) continue;
+
+				// Find user waypoints between these two endpoints
+				const idxA = waypoints.indexOf(a);
+				const idxB = waypoints.indexOf(b);
+				const startIdx = Math.min(idxA, idxB);
+				const endIdx = Math.max(idxA, idxB);
+				const segPath = waypoints
+					.slice(startIdx, endIdx + 1)
+					.map((wp) => [wp.x, wp.y] as [number, number]);
+
+				if (segPath.length >= 2) {
+					segmentPaths.push(segPath);
+					segmentPromises.push(simulateSegment(currentSite, segPath));
+				}
+			}
+
+			const segResults = await Promise.all(segmentPromises);
+
+			// Score each segment
+			const userScores: number[] = [];
+			const userFeasibles: boolean[] = [];
+			let firstStats: SimulationStats | null = null;
+
+			for (let i = 0; i < segResults.length; i++) {
+				const stats = segResults[i];
+				if (!stats) continue;
+				if (!firstStats) firstStats = stats;
+				const feasible = (stats["traverse_feasible"] as number) >= 0.5;
+				userFeasibles.push(feasible);
+				userScores.push(
+					feasible ? (stats["traversal_score"] as number) || 0 : 0,
+				);
+			}
+
+			// Auto scores (already per-segment from precalcRound)
 			const autoStats: SimulationStats = round.autoStats || {};
 			const autoFeasible =
 				(autoStats["traverse_feasible"] as number) >= 0.5;
+			const autoScore = autoFeasible
+				? (autoStats["traversal_score"] as number) || 0
+				: 0;
 
-			const bothFailed = !userFeasible && !autoFeasible;
+			// Average user segment scores
+			const userAvgScore =
+				userScores.length > 0
+					? userScores.reduce((a, b) => a + b, 0) / userScores.length
+					: 0;
+
+			const anyUserFeasible = userFeasibles.some(Boolean);
+			const bothFailed = !anyUserFeasible && !autoFeasible;
+
 			if (bothFailed) {
 				const failDistScore = (
 					stats: SimulationStats | null,
@@ -256,19 +299,35 @@ export function useGame(deps: UseGameDeps) {
 					const progress = 1 - Math.min(distToEnd / totalDist, 1);
 					return Math.round(progress * 1000);
 				};
-				const start = round.waypoints[0];
-				const end = round.waypoints[round.waypoints.length - 1];
-				round.userScore = failDistScore(userStats, start, end);
-				round.autoScore = failDistScore(autoStats, start, end);
-			} else {
-				round.userScore = userFeasible
-					? (userStats["traversal_score"] as number) || 0
-					: 0;
+				// Average fail distance across segments
+				let totalUserFailScore = 0;
+				let failCount = 0;
+				for (let i = 0; i < segResults.length; i++) {
+					const reqA = required[i];
+					const reqB = required[i + 1];
+					if (reqA && reqB) {
+						totalUserFailScore += failDistScore(segResults[i], reqA, reqB);
+						failCount++;
+					}
+				}
+				round.userScore = failCount > 0 ? Math.round(totalUserFailScore / failCount) : 0;
+
+				// For auto, use the score from autoStats (already averaged in precalcRound)
 				round.autoScore = autoFeasible
 					? (autoStats["traversal_score"] as number) || 0
 					: 0;
+			} else {
+				round.userScore = anyUserFeasible
+					? Math.round(userAvgScore)
+					: 0;
+				round.autoScore = autoFeasible
+					? Math.round(autoScore)
+					: 0;
 			}
-			setManualStats(userStats);
+
+			round.userPath = waypoints;
+			round.userStats = firstStats || {};
+			setManualStats(firstStats);
 
 			setAutoStats(Object.keys(autoStats).length > 0 ? autoStats : null);
 			if (round.autoPath) {

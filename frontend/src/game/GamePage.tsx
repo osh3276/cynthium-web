@@ -130,10 +130,20 @@ export default function GamePage() {
 		setAutoStats(null);
 	}, [showGameResult, showGameFinish]);
 
-	// Auto-start game on mount
-	useEffect(() => {
-		handleStartGame();
-	}, []); // eslint-disable-line react-hooks/exhaustive-deps
+const handleChangeMapType = useCallback(
+	(mapType: string, date: string) => {
+		mapTypeRef.current = mapType;
+		if (currentSite) {
+			loadSiteMap(currentSite, mapType, date);
+		}
+	},
+	[currentSite, loadSiteMap],
+);
+
+// Auto-start game on mount
+useEffect(() => {
+	handleStartGame();
+}, []); // eslint-disable-line react-hooks/exhaustive-deps
 
 	return (
 		<div className="app-layout">
@@ -175,6 +185,7 @@ export default function GamePage() {
 								onMoveWaypoint={handleMoveWaypoint}
 								onClearWaypoints={handleClearWaypoints}
 								onAddWaypoint={handleAddWaypoint}
+								onChangeMapType={handleChangeMapType}
 								simulating={simulating}
 							/>
 					</div>

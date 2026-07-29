@@ -1,20 +1,22 @@
 import type { Waypoint, GameState } from "../types";
 import { ARTEMIS_SR } from "./roverPresets";
 import PlanningPanel from "../components/PlanningPanel";
+import MapSelectionPanel from "../components/MapSelectionPanel";
 
 	interface Props {
-	gameState: GameState;
-	gameWaypoints: Waypoint[];
-	waypoints: Waypoint[];
-	onFinishPath: () => void;
-	onNextRound: () => void;
-	onRemoveWaypoint: (index: number) => void;
-	onUpdateWaypoint: (index: number, wp: Waypoint) => void;
-	onMoveWaypoint: (fromIndex: number, toIndex: number) => void;
-	onClearWaypoints: () => void;
-	onAddWaypoint: (wp: Waypoint) => void;
-	simulating: boolean;
-}
+		gameState: GameState;
+		gameWaypoints: Waypoint[];
+		waypoints: Waypoint[];
+		onFinishPath: () => void;
+		onNextRound: () => void;
+		onRemoveWaypoint: (index: number) => void;
+		onUpdateWaypoint: (index: number, wp: Waypoint) => void;
+		onMoveWaypoint: (fromIndex: number, toIndex: number) => void;
+		onClearWaypoints: () => void;
+		onAddWaypoint: (wp: Waypoint) => void;
+		onChangeMapType: (mapType: string, date: string) => void;
+		simulating: boolean;
+	}
 
 export default function GameSidebar({
 	gameState,
@@ -27,11 +29,20 @@ export default function GameSidebar({
 	onMoveWaypoint,
 	onClearWaypoints,
 	onAddWaypoint,
+	onChangeMapType,
 	simulating,
 }: Props) {
 	return (
 		<aside className="sidebar">
 			<div className="sidebar-scroll">
+				<MapSelectionPanel
+					onLoadSite={() => {}}
+					onChangeMapType={onChangeMapType}
+					status="loaded"
+					defaultDate="2026-05-13"
+					readOnly
+				/>
+				<div className="sidebar-divider" />
 				<div className="panel">
 					<h3 className="panel-title">
 						Game — Round {gameState.currentRound + 1} of{" "}

@@ -65,6 +65,9 @@ export default function Game({
 				<div className="dialog-overlay">
 					<div className="dialog" style={{ alignItems: "center" }}>
 						<div className="dialog-title">Loading game...</div>
+						<div style={{ fontSize: 12, color: "#a8b2d1", marginTop: 8 }}>
+							this may take a while
+						</div>
 					</div>
 				</div>
 			)}
