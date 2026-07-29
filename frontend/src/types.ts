@@ -93,8 +93,8 @@ export interface SimulationStats {
 export interface GameRound {
 	siteName: string;
 	mapType: string;
-	startPoint: Waypoint;
-	endPoint: Waypoint;
+	/** Ordered list of required waypoints the user must path through (start, intermediates, end) */
+	waypoints: Waypoint[];
 	userPath: Waypoint[];
 	autoPath: number[][] | null;
 	userStats: SimulationStats | null;

@@ -3,12 +3,12 @@ import { ARTEMIS_SR } from "./roverPresets";
 import { randInRange, sampleElevation } from "./utils";
 
 /**
- * Generate start/end points for a game round by fetching the site map and
- * searching for a viable pair via autodesign.
+ * Generate an ordered chain of required waypoints (3-5) for a game round.
+ * Tests that the full chain is traverseable via autodesign in segment mode.
  */
 export async function generateRoundPoints(
 	round: GameRound,
-): Promise<{ start: Waypoint; end: Waypoint } | null> {
+): Promise<Waypoint[] | null> {
 	try {
 		const params = new URLSearchParams({ map_type: round.mapType });
 		const res = await fetch(
@@ -26,37 +26,50 @@ export async function generateRoundPoints(
 			7000,
 		);
 
-		// Try candidate pairs until we find one with a viable path
-		for (;;) {
-			const s = {
-				x: randInRange(cx - halfSpan, cx + halfSpan),
-				y: randInRange(cy - halfSpan, cy + halfSpan),
-			};
-			const e = {
-				x: randInRange(cx - halfSpan, cx + halfSpan),
-				y: randInRange(cy - halfSpan, cy + halfSpan),
-			};
-			const dist = Math.hypot(e.x - s.x, e.y - s.y);
-			if (dist < 2000 || dist > 10000) continue;
+		const mu = ARTEMIS_SR.wheel_friction_coeff;
+		const crr = ARTEMIS_SR.rolling_resistance_coeff;
+		const maxClimbDeg =
+			Math.atan(Math.max(0.001, mu - crr)) * (180 / Math.PI);
+		const slopeLimit = maxClimbDeg * 0.75;
 
-			// Reject steep straight-line slope
-			if (hdata) {
-				const zS = sampleElevation(s.x, s.y, hdata, b);
-				const zE = sampleElevation(e.x, e.y, hdata, b);
-				if (zS != null && zE != null) {
-					const dz = Math.abs(zE - zS);
-					const avgSlopeDeg =
-						Math.atan2(dz, dist) * (180 / Math.PI);
-					const mu = ARTEMIS_SR.wheel_friction_coeff;
-					const crr = ARTEMIS_SR.rolling_resistance_coeff;
-					const maxClimb =
-						Math.atan(Math.max(0.001, mu - crr)) *
-						(180 / Math.PI);
-					if (avgSlopeDeg > maxClimb * 0.75) continue;
-				}
+		// Try candidate chains until we find one with a viable path
+		for (;;) {
+			const count = 3 + Math.floor(Math.random() * 3); // 3-5 waypoints
+			const wps: Waypoint[] = [];
+
+			// Generate each waypoint in sequence
+			for (let i = 0; i < count; i++) {
+				const wp: Waypoint = {
+					x: randInRange(cx - halfSpan, cx + halfSpan),
+					y: randInRange(cy - halfSpan, cy + halfSpan),
+				};
+				wps.push(wp);
 			}
 
-			// Test if autodesign can find a viable path
+			// Reject if any consecutive pair is too close or too far
+			let distOk = true;
+			for (let i = 0; i < wps.length - 1; i++) {
+				const dist = Math.hypot(wps[i + 1].x - wps[i].x, wps[i + 1].y - wps[i].y);
+				if (dist < 1000 || dist > 10000) { distOk = false; break; }
+			}
+			if (!distOk) continue;
+
+			// Reject steep straight-line slopes between consecutive points
+			if (hdata) {
+				let slopeOk = true;
+				for (let i = 0; i < wps.length - 1; i++) {
+					const zA = sampleElevation(wps[i].x, wps[i].y, hdata, b);
+					const zB = sampleElevation(wps[i + 1].x, wps[i + 1].y, hdata, b);
+					if (zA != null && zB != null) {
+						const dist = Math.hypot(wps[i + 1].x - wps[i].x, wps[i + 1].y - wps[i].y);
+						const avgSlopeDeg = Math.atan2(Math.abs(zB - zA), dist) * (180 / Math.PI);
+						if (avgSlopeDeg > slopeLimit) { slopeOk = false; break; }
+					}
+				}
+				if (!slopeOk) continue;
+			}
+
+			// Test if autodesign can find a viable path through all waypoints
 			try {
 				const testRes = await fetch(
 					`/api/sites/${encodeURIComponent(round.siteName)}/autodesign`,
@@ -66,11 +79,11 @@ export async function generateRoundPoints(
 							"Content-Type": "application/json",
 						},
 						body: JSON.stringify({
-							waypoints_xy: [[s.x, s.y], [e.x, e.y]],
+							waypoints_xy: wps.map((wp) => [wp.x, wp.y]),
 							slope_weight: 0.3,
 							sun_weight: 0.3,
 							meteor_weight: 0.05,
-							path_mode: "direct",
+							path_mode: "segment",
 							rover_mass_kg:
 								ARTEMIS_SR.mass_kg,
 							rover_power_hp:
@@ -94,7 +107,6 @@ export async function generateRoundPoints(
 				if (testRes.ok) {
 					const testData: AutodesignResult =
 						await testRes.json();
-					// Reject if path exists but simulation says infeasible
 					const feasible =
 						!testData.simulation ||
 						Number(
@@ -103,7 +115,7 @@ export async function generateRoundPoints(
 							],
 						) >= 0.5;
 					if (feasible) {
-						return { start: s, end: e };
+						return wps;
 					}
 				}
 			} catch {}
@@ -119,7 +131,7 @@ export function autoBody(waypoints_xy: number[][]): string {
 		slope_weight: 0.3,
 		sun_weight: 0.3,
 		meteor_weight: 0.05,
-		path_mode: "direct",
+		path_mode: waypoints_xy.length > 2 ? "segment" : "direct",
 		rover_mass_kg: ARTEMIS_SR.mass_kg,
 		rover_power_hp: ARTEMIS_SR.power_hp,
 		rover_friction_coeff: ARTEMIS_SR.wheel_friction_coeff,
@@ -160,10 +172,9 @@ export async function precalcRound(
 			{
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: autoBody([
-					[round.startPoint.x, round.startPoint.y],
-					[round.endPoint.x, round.endPoint.y],
-				]),
+				body: autoBody(
+					round.waypoints.map((wp) => [wp.x, wp.y]),
+				),
 			},
 		);
 		if (!autoRes.ok) return;

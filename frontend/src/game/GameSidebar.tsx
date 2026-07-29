@@ -2,10 +2,9 @@ import type { Waypoint, GameState } from "../types";
 import { ARTEMIS_SR } from "./roverPresets";
 import PlanningPanel from "../components/PlanningPanel";
 
-interface Props {
+	interface Props {
 	gameState: GameState;
-	gameStartPoint: Waypoint | null;
-	gameEndPoint: Waypoint | null;
+	gameWaypoints: Waypoint[];
 	waypoints: Waypoint[];
 	onFinishPath: () => void;
 	onNextRound: () => void;
@@ -19,8 +18,7 @@ interface Props {
 
 export default function GameSidebar({
 	gameState,
-	gameStartPoint,
-	gameEndPoint,
+	gameWaypoints,
 	waypoints,
 	onFinishPath,
 	onNextRound,
@@ -63,14 +61,14 @@ export default function GameSidebar({
 						}}
 					>
 						<span>
-							Start: ({gameStartPoint?.x.toFixed(1)},{" "}
-							{gameStartPoint?.y.toFixed(1)})
+							Waypoints: {gameWaypoints.length} markers
 						</span>
 						<br />
-						<span>
-							End: ({gameEndPoint?.x.toFixed(1)},{" "}
-							{gameEndPoint?.y.toFixed(1)})
-						</span>
+						{gameWaypoints.map((wp, i) => (
+							<span key={i} style={{ display: "block", fontSize: 10 }}>
+								{i + 1}: ({wp.x.toFixed(1)}, {wp.y.toFixed(1)})
+							</span>
+						))}
 					</div>
 				</div>
 				<div className="sidebar-divider" />

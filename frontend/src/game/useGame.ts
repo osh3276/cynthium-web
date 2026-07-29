@@ -51,8 +51,7 @@ export function useGame(deps: UseGameDeps) {
 	} = deps;
 
 	const [gameState, setGameState] = useState<GameState | null>(null);
-	const [gameStartPoint, setGameStartPoint] = useState<Waypoint | null>(null);
-	const [gameEndPoint, setGameEndPoint] = useState<Waypoint | null>(null);
+	const [gameWaypoints, setGameWaypoints] = useState<Waypoint[]>([]);
 	const [showGameResult, setShowGameResult] = useState(false);
 	const [pendingGameResult, setPendingGameResult] = useState(false);
 	const [showGameFinish, setShowGameFinish] = useState(false);
@@ -78,8 +77,7 @@ export function useGame(deps: UseGameDeps) {
 				const round: GameRound = {
 					siteName: name,
 					mapType: mapTypeRef.current,
-					startPoint: { x: 0, y: 0 },
-					endPoint: { x: 0, y: 0 },
+					waypoints: [],
 					userPath: [],
 					autoPath: null,
 					userStats: null,
@@ -89,8 +87,7 @@ export function useGame(deps: UseGameDeps) {
 				};
 				const pts = await generateRoundPoints(round);
 				if (pts) {
-					round.startPoint = pts.start;
-					round.endPoint = pts.end;
+					round.waypoints = pts;
 				}
 				return round;
 			});
@@ -109,8 +106,7 @@ export function useGame(deps: UseGameDeps) {
 			setAutodesignResult(null);
 			setManualStats(null);
 			setAutoStats(null);
-			setGameStartPoint(rounds[0].startPoint);
-			setGameEndPoint(rounds[0].endPoint);
+			setGameWaypoints(rounds[0].waypoints);
 			await loadSiteMap(
 				rounds[0].siteName,
 				rounds[0].mapType,
@@ -149,8 +145,7 @@ export function useGame(deps: UseGameDeps) {
 		const mt = mapTypeRef.current;
 		nextRound.mapType = mt;
 		setGameState((prev) => (prev ? { ...prev, currentRound: next } : prev));
-		setGameStartPoint(nextRound.startPoint);
-		setGameEndPoint(nextRound.endPoint);
+		setGameWaypoints(nextRound.waypoints);
 		setWaypoints([]);
 		setAutodesignResult(null);
 		setManualStats(null);
@@ -175,30 +170,52 @@ export function useGame(deps: UseGameDeps) {
 		const manualPath = waypoints.map((w) => [w.x, w.y] as [number, number]);
 		if (manualPath.length < 2) return;
 
-		// Validate first/last waypoints are near S/E markers
+		// Validate that user's path visits each required waypoint in order
 		const b = mapData.bounds;
 		const radius = Math.max(b.right - b.left, b.top - b.bottom) * 0.05;
+		const required = round.waypoints;
+		if (required.length < 2) return;
+
+		// Check first user waypoint is near first required waypoint
 		const first = waypoints[0];
-		const last = waypoints[waypoints.length - 1];
-		const dStart = Math.hypot(
-			first.x - round.startPoint.x,
-			first.y - round.startPoint.y,
+		const dFirst = Math.hypot(
+			first.x - required[0].x,
+			first.y - required[0].y,
 		);
-		const dEnd = Math.hypot(
-			last.x - round.endPoint.x,
-			last.y - round.endPoint.y,
-		);
-		if (dStart > radius) {
+		if (dFirst > radius) {
 			alert(
-				`First waypoint is too far from the start marker (${dStart.toFixed(0)}m, max ${radius.toFixed(0)}m). Place a waypoint near the blue S.`,
+				`First waypoint is too far from waypoint 1 (${dFirst.toFixed(0)}m, max ${radius.toFixed(0)}m). Place a waypoint near marker 1.`,
 			);
 			return;
 		}
-		if (dEnd > radius) {
+
+		// Check last user waypoint is near last required waypoint
+		const last = waypoints[waypoints.length - 1];
+		const dLast = Math.hypot(
+			last.x - required[required.length - 1].x,
+			last.y - required[required.length - 1].y,
+		);
+		if (dLast > radius) {
 			alert(
-				`Last waypoint is too far from the end marker (${dEnd.toFixed(0)}m, max ${radius.toFixed(0)}m). Place a waypoint near the red E.`,
+				`Last waypoint is too far from waypoint ${required.length} (${dLast.toFixed(0)}m, max ${radius.toFixed(0)}m). Place a waypoint near marker ${required.length}.`,
 			);
 			return;
+		}
+
+		// Check intermediate required waypoints have a user waypoint nearby
+		for (let i = 1; i < required.length - 1; i++) {
+			const req = required[i];
+			let found = false;
+			for (const uwp of waypoints) {
+				const d = Math.hypot(uwp.x - req.x, uwp.y - req.y);
+				if (d <= radius) { found = true; break; }
+			}
+			if (!found) {
+				alert(
+					`No waypoint near required waypoint ${i + 1} (within ${radius.toFixed(0)}m). Place a waypoint near marker ${i + 1}.`,
+				);
+				return;
+			}
 		}
 
 		setSimulating(true);
@@ -239,8 +256,10 @@ export function useGame(deps: UseGameDeps) {
 					const progress = 1 - Math.min(distToEnd / totalDist, 1);
 					return Math.round(progress * 1000);
 				};
-				round.userScore = failDistScore(userStats, round.startPoint, round.endPoint);
-				round.autoScore = failDistScore(autoStats, round.startPoint, round.endPoint);
+				const start = round.waypoints[0];
+				const end = round.waypoints[round.waypoints.length - 1];
+				round.userScore = failDistScore(userStats, start, end);
+				round.autoScore = failDistScore(autoStats, start, end);
 			} else {
 				round.userScore = userFeasible
 					? (userStats["traversal_score"] as number) || 0
@@ -284,8 +303,7 @@ export function useGame(deps: UseGameDeps) {
 
 	const handleGameFinish = useCallback(() => {
 		setGameState(null);
-		setGameStartPoint(null);
-		setGameEndPoint(null);
+		setGameWaypoints([]);
 		setShowGameFinish(false);
 		setShowGameResult(false);
 		setRoverSettings(CURIOSITY);
@@ -317,8 +335,7 @@ export function useGame(deps: UseGameDeps) {
 
 	return {
 		gameState,
-		gameStartPoint,
-		gameEndPoint,
+		gameWaypoints,
 		showGameResult,
 		showGameFinish,
 		gameLoading,

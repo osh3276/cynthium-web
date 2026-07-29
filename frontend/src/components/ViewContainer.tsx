@@ -16,8 +16,7 @@ interface Props {
 		autodesignResult: AutodesignResult | null;
 		onAddWaypoint: (wp: Waypoint) => void;
 		onUpdateWaypoint?: (index: number, wp: Waypoint) => void;
-		gameStartPoint?: Waypoint | null;
-		gameEndPoint?: Waypoint | null;
+		gameWaypoints?: Waypoint[];
 		manualStats: SimulationStats | null;
 		autoStats: SimulationStats | null;
 		onAnimationsComplete?: () => void;
@@ -30,8 +29,7 @@ export default function ViewContainer({
 		autodesignResult,
 		onAddWaypoint,
 		onUpdateWaypoint,
-		gameStartPoint,
-		gameEndPoint,
+		gameWaypoints,
 		manualStats,
 		autoStats,
 		onAnimationsComplete,
@@ -74,8 +72,7 @@ export default function ViewContainer({
 					autodesignResult={autodesignResult}
 					onAddWaypoint={onAddWaypoint}
 					onUpdateWaypoint={onUpdateWaypoint}
-					gameStartPoint={gameStartPoint}
-					gameEndPoint={gameEndPoint}
+					gameWaypoints={gameWaypoints}
 					manualStats={manualStats}
 					autoStats={autoStats}
 					onAnimationsComplete={onAnimationsComplete}

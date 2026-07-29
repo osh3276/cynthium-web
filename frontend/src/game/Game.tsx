@@ -75,17 +75,18 @@ export default function Game({
 						<div style={{ fontSize: 12, lineHeight: 1.6, color: "#a8b2d1" }}>
 							<p style={{ marginBottom: 8 }}>
 								Plan a route across the lunar surface for the
-								Artemis SR rover. Each round gives you a start
-								and end point — place waypoints to define your
-								path.
+								Artemis SR rover. Each round gives you several
+								numbered waypoint markers to visit in order —
+								place waypoints to define your path.
 							</p>
 							<p style={{ marginBottom: 8 }}>
 								Click on the 2D map to place waypoints. The
 								first waypoint must be near the blue{" "}
-								<span style={{ color: "#4fc3f7" }}>S</span>{" "}
+								<span style={{ color: "#4fc3f7" }}>1</span>{" "}
 								marker and the last near the red{" "}
-								<span style={{ color: "#e53935" }}>E</span>{" "}
-								marker.
+								<span style={{ color: "#e53935" }}>N</span>{" "}
+								marker (where N is the final number). Orange
+								markers in between must also be visited.
 							</p>
 							<p style={{ marginBottom: 8 }}>
 								When you're ready, press{" "}

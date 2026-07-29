@@ -55,8 +55,7 @@ export default function GamePage() {
 
 	const {
 		gameState,
-		gameStartPoint,
-		gameEndPoint,
+		gameWaypoints,
 		showGameResult,
 		showGameFinish,
 		gameLoading,
@@ -156,8 +155,7 @@ export default function GamePage() {
 							autodesignResult={autodesignResult}
 							onAddWaypoint={handleAddWaypoint}
 							onUpdateWaypoint={handleUpdateWaypoint}
-							gameStartPoint={gameStartPoint}
-							gameEndPoint={gameEndPoint}
+							gameWaypoints={gameWaypoints}
 							manualStats={manualStats}
 							autoStats={autoStats}
 							onAnimationsComplete={handleAnimationsComplete}
@@ -168,8 +166,7 @@ export default function GamePage() {
 					<div className="sidebar-pane">
 						<GameSidebar
 								gameState={gameState}
-								gameStartPoint={gameStartPoint}
-								gameEndPoint={gameEndPoint}
+								gameWaypoints={gameWaypoints}
 								waypoints={waypoints}
 								onFinishPath={handleFinishPath}
 								onNextRound={advanceRound}

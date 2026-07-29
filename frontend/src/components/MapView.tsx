@@ -76,8 +76,8 @@ function turboNormFromRGB(r: number, g: number, b: number): number {
 	return best;
 }
 
-/** Scale factor for animation speed (30x real-time so it's visible in a few seconds). */
-const ROVER_ANIMATION_SPEED = 30;
+/** Scale factor for animation speed (90x real-time so it's visible in a few seconds). */
+const ROVER_ANIMATION_SPEED = 90;
 
 interface Props {
 		mapData: MapPayload | null;
@@ -86,8 +86,7 @@ interface Props {
 		autodesignResult: AutodesignResult | null;
 		onAddWaypoint: (wp: Waypoint) => void;
 		onUpdateWaypoint?: (index: number, wp: Waypoint) => void;
-		gameStartPoint?: Waypoint | null;
-		gameEndPoint?: Waypoint | null;
+		gameWaypoints?: Waypoint[];
 		manualStats: SimulationStats | null;
 		autoStats: SimulationStats | null;
 		onAnimationsComplete?: () => void;
@@ -100,8 +99,7 @@ export default function MapView({
 		autodesignResult,
 		onAddWaypoint,
 		onUpdateWaypoint,
-		gameStartPoint,
-		gameEndPoint,
+		gameWaypoints,
 		manualStats,
 		autoStats,
 		onAnimationsComplete,
@@ -564,76 +562,43 @@ export default function MapView({
 								pointerEvents: "none",
 							}}
 						>
-							{gameStartPoint &&
-								(() => {
-									const b = mapData!.bounds;
-									const ix =
-										((gameStartPoint.x - b.left) /
-											(b.right - b.left)) *
-										imgNatural.w;
-									const iy =
-										imgNatural.h -
-										((gameStartPoint.y - b.bottom) /
-											(b.top - b.bottom)) *
-											imgNatural.h;
-									return (
-										<g>
-											<rect
-												x={ix - 8}
-												y={iy - 8}
-												width={16}
-												height={16}
-												fill="#4fc3f7"
-												rx={2}
-											/>
-											<text
-												x={ix}
-												y={iy + 3}
-												textAnchor="middle"
-												fill="white"
-												fontSize={9}
-												fontWeight={700}
-											>
-												S
-											</text>
-										</g>
-									);
-								})()}
-							{gameEndPoint &&
-								(() => {
-									const b = mapData!.bounds;
-									const ix =
-										((gameEndPoint.x - b.left) /
-											(b.right - b.left)) *
-										imgNatural.w;
-									const iy =
-										imgNatural.h -
-										((gameEndPoint.y - b.bottom) /
-											(b.top - b.bottom)) *
-											imgNatural.h;
-									return (
-										<g>
-											<rect
-												x={ix - 8}
-												y={iy - 8}
-												width={16}
-												height={16}
-												fill="#e53935"
-												rx={2}
-											/>
-											<text
-												x={ix}
-												y={iy + 3}
-												textAnchor="middle"
-												fill="white"
-												fontSize={9}
-												fontWeight={700}
-											>
-												E
-											</text>
-										</g>
-									);
-								})()}
+							{gameWaypoints?.map((wp, idx) => {
+								const b = mapData!.bounds;
+								const ix =
+									((wp.x - b.left) /
+										(b.right - b.left)) *
+									imgNatural.w;
+								const iy =
+									imgNatural.h -
+									((wp.y - b.bottom) /
+										(b.top - b.bottom)) *
+										imgNatural.h;
+								const isFirst = idx === 0;
+								const isLast = idx === gameWaypoints.length - 1;
+								const fill = isFirst ? "#4fc3f7" : isLast ? "#e53935" : "#ffb74d";
+								return (
+									<g key={idx}>
+										<rect
+											x={ix - 8}
+											y={iy - 8}
+											width={16}
+											height={16}
+											fill={fill}
+											rx={2}
+										/>
+										<text
+											x={ix}
+											y={iy + 3}
+											textAnchor="middle"
+											fill="white"
+											fontSize={9}
+											fontWeight={700}
+										>
+											{idx + 1}
+										</text>
+									</g>
+								);
+							})}
 							{/* Outline stroke for the dotted line — renders underneath */}
 							{waypoints.length > 1 && (
 								<polyline

@@ -333,8 +333,7 @@ function App() {
 							autodesignResult={autodesignResult}
 							onAddWaypoint={handleAddWaypoint}
 							onUpdateWaypoint={handleUpdateWaypoint}
-							gameStartPoint={null}
-							gameEndPoint={null}
+							gameWaypoints={undefined}
 							manualStats={manualStats}
 							autoStats={autoStats}
 						/>
