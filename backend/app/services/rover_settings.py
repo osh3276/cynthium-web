@@ -11,6 +11,8 @@ class RoverSettings:
 	rolling_resistance_coeff: float
 	battery_capacity_wh: float = 500.0
 	idle_drain_w: float = 10.0
+	target_cruise_speed_mps: float = 2.0
+	max_brake_decel_mps2: float = 1.0
 
 	@property
 	def power_w(self) -> float:

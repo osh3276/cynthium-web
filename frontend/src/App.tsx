@@ -164,6 +164,8 @@ function App() {
 							rover_crr: config.rover_crr,
 							rover_battery_capacity_wh: 500.0,
 							rover_idle_drain_w: 10.0,
+							rover_target_cruise_speed_mps: 2.0,
+							rover_max_brake_decel_mps2: 1.0,
 						}),
 					},
 				);
@@ -203,6 +205,8 @@ function App() {
 				rover_crr: rover.rolling_resistance_coeff,
 				rover_battery_capacity_wh: rover.battery_capacity_wh,
 				rover_idle_drain_w: rover.idle_drain_w,
+				rover_target_cruise_speed_mps: rover.target_cruise_speed_mps,
+				rover_max_brake_decel_mps2: rover.max_brake_decel_mps2,
 			});
 
 		const run = async (

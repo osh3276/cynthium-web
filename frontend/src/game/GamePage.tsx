@@ -15,7 +15,7 @@ export default function GamePage() {
 	const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
 	const [autodesignResult, setAutodesignResult] =
 		useState<AutodesignResult | null>(null);
-	const [, setRoverSettings] = useState({ mass_kg: 530, power_hp: 0.72, wheel_friction_coeff: 0.7, rolling_resistance_coeff: 0.15, battery_capacity_wh: 500, idle_drain_w: 10 });
+	const [, setRoverSettings] = useState({ mass_kg: 530, power_hp: 0.72, wheel_friction_coeff: 0.7, rolling_resistance_coeff: 0.15, battery_capacity_wh: 500, idle_drain_w: 10, target_cruise_speed_mps: 2, max_brake_decel_mps2: 1 });
 	const [manualStats, setManualStats] = useState<SimulationStats | null>(null);
 	const [autoStats, setAutoStats] = useState<SimulationStats | null>(null);
 	const [simulating, setSimulating] = useState(false);

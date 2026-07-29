@@ -990,3 +990,67 @@ select.field-input option {
 .export-buttons {
 	gap: 6px;
 }
+
+/* ===== Detail Toggle ===== */
+.detail-toggle {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 8px;
+	padding: 4px 8px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--text-dim);
+	background: none;
+	border: 1px solid var(--border);
+	cursor: pointer;
+	width: 100%;
+	text-transform: uppercase;
+	letter-spacing: 0.8px;
+	transition: color 0.15s, border-color 0.15s;
+}
+
+.detail-toggle:hover {
+	color: var(--accent);
+	border-color: var(--accent-dim);
+}
+
+.detail-toggle-arrow {
+	font-size: 8px;
+	transition: transform 0.2s;
+}
+
+.detail-toggle-arrow.expanded {
+	transform: rotate(90deg);
+}
+
+.detail-table {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	margin-top: 4px;
+	padding: 4px 0;
+}
+
+.detail-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 2px 8px;
+	font-size: 11px;
+}
+
+.detail-row:nth-child(odd) {
+	background: rgba(255, 255, 255, 0.02);
+}
+
+.detail-label {
+	color: var(--text-dim);
+	font-weight: 500;
+}
+
+.detail-value {
+	color: var(--text-bright);
+	font-family: var(--font-mono);
+	font-weight: 600;
+}

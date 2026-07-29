@@ -83,6 +83,10 @@ export async function generateRoundPoints(
 								ARTEMIS_SR.battery_capacity_wh,
 							rover_idle_drain_w:
 								ARTEMIS_SR.idle_drain_w,
+							rover_target_cruise_speed_mps:
+								ARTEMIS_SR.target_cruise_speed_mps,
+							rover_max_brake_decel_mps2:
+								ARTEMIS_SR.max_brake_decel_mps2,
 							max_attempts: 1,
 						}),
 					},
@@ -122,6 +126,8 @@ export function autoBody(waypoints_xy: number[][]): string {
 		rover_crr: ARTEMIS_SR.rolling_resistance_coeff,
 		rover_battery_capacity_wh: ARTEMIS_SR.battery_capacity_wh,
 		rover_idle_drain_w: ARTEMIS_SR.idle_drain_w,
+		rover_target_cruise_speed_mps: ARTEMIS_SR.target_cruise_speed_mps,
+		rover_max_brake_decel_mps2: ARTEMIS_SR.max_brake_decel_mps2,
 	});
 }
 
@@ -135,6 +141,8 @@ export function simBody(path_xy: [number, number][]): string {
 		rover_crr: ARTEMIS_SR.rolling_resistance_coeff,
 		rover_battery_capacity_wh: ARTEMIS_SR.battery_capacity_wh,
 		rover_idle_drain_w: ARTEMIS_SR.idle_drain_w,
+		rover_target_cruise_speed_mps: ARTEMIS_SR.target_cruise_speed_mps,
+		rover_max_brake_decel_mps2: ARTEMIS_SR.max_brake_decel_mps2,
 	});
 }
 

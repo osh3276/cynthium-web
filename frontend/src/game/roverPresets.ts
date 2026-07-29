@@ -7,6 +7,8 @@ export const CURIOSITY: RoverSettings = {
 	rolling_resistance_coeff: 0.02,
 	battery_capacity_wh: 500.0,
 	idle_drain_w: 10.0,
+	target_cruise_speed_mps: 2.0,
+	max_brake_decel_mps2: 1.0,
 };
 
 export const ARTEMIS_SR: RoverSettings = {
@@ -16,4 +18,6 @@ export const ARTEMIS_SR: RoverSettings = {
 	rolling_resistance_coeff: 0.15,
 	battery_capacity_wh: 500.0,
 	idle_drain_w: 10.0,
+	target_cruise_speed_mps: 2.0,
+	max_brake_decel_mps2: 1.0,
 };

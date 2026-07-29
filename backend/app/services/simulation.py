@@ -9,6 +9,60 @@ from .site_rasters import load_site_data
 
 LUNAR_GRAVITY = 1.625  # m/s^2
 
+DT_MIN = 0.02
+DT_MAX = 0.1
+SPEED_EPS = 0.01
+
+
+class SpeedPIDController:
+	"""PID speed controller: maps error to throttle (0-1) or brake decel."""
+
+	def __init__(
+		self,
+		Kp: float = 8.0,
+		Ki: float = 0.4,
+		Kd: float = 0.6,
+		integral_limit: float = 5.0,
+	):
+		self.Kp = Kp
+		self.Ki = Ki
+		self.Kd = Kd
+		self.integral_limit = integral_limit
+		self._integral = 0.0
+		self._prev_error = 0.0
+
+	def reset(self) -> None:
+		self._integral = 0.0
+		self._prev_error = 0.0
+
+	def update(self, speed: float, target: float, dt: float) -> tuple[float, float]:
+		"""Compute (throttle 0-1, brake_decel m/s^2) for one timestep."""
+		error = target - speed
+		self._integral += error * dt
+		self._integral = max(-self.integral_limit, min(self.integral_limit, self._integral))
+		derivative = (error - self._prev_error) / max(dt, 1e-6)
+		self._prev_error = error
+		output = self.Kp * error + self.Ki * self._integral + self.Kd * derivative
+		if output >= 0.0:
+			return min(1.0, output), 0.0
+		else:
+			return 0.0, min(2.0, -output * 2.0)
+
+
+def _clamp(val: float, lo: float, hi: float) -> float:
+	return max(lo, min(hi, val))
+
+
+def _estimate_resolution(pts_xyz: np.ndarray) -> float:
+	"""Median segment length along the path (m)."""
+	if pts_xyz.shape[0] < 2:
+		return 5.0
+	diffs = np.diff(pts_xyz[:, :2], axis=0)
+	lengths = np.linalg.norm(diffs, axis=1)
+	valid = lengths[lengths > 1e-9]
+	return float(np.median(valid)) if len(valid) > 0 else 5.0
+
+
 # ---------------------------------------------------------------------------
 # Scoring constants
 # ---------------------------------------------------------------------------
@@ -149,130 +203,123 @@ def simulate_rover_over_path(
     # Record starting point with initial velocity
     velocity_profile.append([float(pts_xyz[0, 0]), float(pts_xyz[0, 1]), v])
 
-    for i in range(ds.size):
-        s = float(ds[i])
-        if not (s > 0):
-            # Still record a velocity entry for this point even if zero-length segment
-            velocity_profile.append(
-                [float(pts_xyz[i + 1, 0]), float(pts_xyz[i + 1, 1]), v]
-            )
+    cruise = float(rover.target_cruise_speed_mps)
+    max_brake = float(rover.max_brake_decel_mps2)
+    c_rr = float(rover.rolling_resistance_coeff)
+    res_m = _estimate_resolution(pts_xyz)
+    pid = SpeedPIDController()
+
+    seg_i = 0  # current segment index
+    seg_progress = 0.0  # how far into the current segment (m)
+    max_steps = 500000
+    stagnation = 0
+    completed = False
+    failure_reason: str | None = None
+    failure_xy: list[float] | None = None
+    # Record profile at segment boundaries to avoid excessive points
+    last_profile_seg = -1
+
+    for step in range(max_steps):
+        if seg_i >= ds.size:
+            completed = True
+            break
+
+        s = float(ds[seg_i])
+        if s <= 0:
+            # Record zero-length point for continuity
+            if seg_i != last_profile_seg:
+                velocity_profile.append([float(pts_xyz[seg_i, 0]), float(pts_xyz[seg_i, 1]), v])
+                last_profile_seg = seg_i
+            seg_i += 1
+            seg_progress = 0.0
             continue
 
-        th = float(theta[i])
+        th = float(theta[seg_i])
         f_n = m * g * abs(np.cos(th))
         f_trac_max = mu * f_n
-        v_eff = max(float(v), float(v_min_power_mps))
-        f_power = p_w / v_eff
-        f_drive = min(f_power, f_trac_max)
+
+        # Target speed: cruise speed, reduced toward end of path
+        remaining = np.sum(ds[seg_i:]) - seg_progress
+        if remaining < 10.0 and seg_i >= ds.size - 3:
+            target_speed = cruise * max(0.3, remaining / 10.0)
+        else:
+            target_speed = cruise
+
+        # Adaptive timestep based on speed and resolution
+        dt = _clamp(res_m / max(v, 0.5), DT_MIN, DT_MAX)
+
+        # PID: throttle (0-1) and brake_decel (m/s^2)
+        throttle, brake_decel = pid.update(v, target_speed, dt)
+
+        # Compute forces
+        v_eff = max(v, v_min_power_mps)
+        f_drive = min(throttle * p_w / v_eff, f_trac_max)
         f_grade = m * g * np.sin(th)
-        c_rr = float(rover.rolling_resistance_coeff)
         f_roll = c_rr * f_n
-        f_net = f_drive - f_grade - f_roll
+        f_brake = min(brake_decel, max_brake) * m
+        f_net = f_drive - f_grade - f_roll - f_brake
         a = f_net / m
 
-        v_sq_next = (v * v) + (2.0 * a * s)
-        if v_sq_next <= 0.0:
-            if a >= 0.0:
-                # Stuck at start of segment - failure at point i
-                failure_xy = [float(pts_xyz[i, 0]), float(pts_xyz[i, 1])]
-                v_next = 0.0
-                dt = 0.0
-                velocity_profile.append([failure_xy[0], failure_xy[1], 0.0])
-            else:
-                s_stop = (v * v) / (-2.0 * a) if v > 0.0 else 0.0
-                frac = s_stop / s if s > 0 else 0.0
-                failure_xy = [
-                    float(pts_xyz[i, 0] + frac * (pts_xyz[i + 1, 0] - pts_xyz[i, 0])),
-                    float(pts_xyz[i, 1] + frac * (pts_xyz[i + 1, 1] - pts_xyz[i, 1])),
-                ]
-                dt = (v / (-a)) if v > 0.0 else 0.0
-                d_total += float(s_stop)
-                t_total += float(dt)
-                if inv_illum is not None and dt > 0.0:
-                    xy_mid = 0.5 * (pts_xyz[i, :2] + pts_xyz[i + 1, :2])
-                    col, row = inv_illum * (float(xy_mid[0]), float(xy_mid[1]))
-                    ci = int(round(col))
-                    ri = int(round(row))
-                    if (
-                        illum_map is not None
-                        and 0 <= ri < illum_map.shape[0]
-                        and 0 <= ci < illum_map.shape[1]
-                    ):
-                        illum = float(illum_map[ri, ci])
-                        if np.isfinite(illum):
-                            energy_j_per_m2 += illum * float(dt)
-                velocity_profile.append([failure_xy[0], failure_xy[1], 0.0])
-            # Battery drain during failure (idle drain for time spent)
-            battery_energy_used_j += idle_w * dt
-            batt_remaining_pct = max(0.0, (batt_cap_j - battery_energy_used_j) / max(batt_cap_j, 1.0) * 100.0) if batt_cap_j > 0 else 100.0
-            min_v = min(min_v, 0.0)
-            max_v = max(max_v, float(v))
-            return {
-                "traverse_feasible": 0.0,
-                "traversal_time_s": float("inf"),
-                "average_velocity_mps": 0.0,
-                "min_velocity_mps": 0.0 if min_v == float("inf") else float(min_v),
-                "max_velocity_mps": float(max_v),
-                "solar_energy_per_m2_j": float(energy_j_per_m2),
-                "avg_solar_illumination_w_per_m2": 0.0,
-                "failure_xy": failure_xy,
-                "failure_reason": "Battery depleted" if battery_energy_used_j >= batt_cap_j else "Route is dynamically infeasible for the current rover settings.",
-                "path_velocity_profile": velocity_profile,
-                "battery_energy_used_j": float(battery_energy_used_j),
-                "battery_remaining_pct": float(batt_remaining_pct),
-                "battery_capacity_wh": float(rover.battery_capacity_wh),
-            }
+        # Update speed (clamped to non-negative)
+        v_new = max(0.0, v + a * dt)
+        v_avg = 0.5 * (v + v_new)
 
-        v_next = float(np.sqrt(v_sq_next))
-        den = float(v + v_next)
-        dt = (2.0 * s / den) if den > 0.0 else 0.0
-        d_total += s
-        t_total += float(dt)
-        v_mid = 0.5 * (float(v) + float(v_next))
-        min_v = min(min_v, float(v_mid))
-        max_v = max(max_v, float(v_mid))
+        # Advance along the segment
+        step_dist = v_avg * dt
+        seg_progress += step_dist
+        d_total += step_dist
+        t_total += dt
 
+        min_v = min(min_v, v)
+        max_v = max(max_v, v)
+
+        # Current position in this segment
+        frac = seg_progress / s if s > 0 else 1.0
+        cx = float(pts_xyz[seg_i, 0]) + frac * float(pts_xyz[seg_i + 1, 0] - pts_xyz[seg_i, 0])
+        cy = float(pts_xyz[seg_i, 1]) + frac * float(pts_xyz[seg_i + 1, 1] - pts_xyz[seg_i, 1])
+
+        # Solar illumination
         if inv_illum is not None and dt > 0.0:
-            xy_mid = 0.5 * (pts_xyz[i, :2] + pts_xyz[i + 1, :2])
-            col, row = inv_illum * (float(xy_mid[0]), float(xy_mid[1]))
+            col, row = inv_illum * (cx, cy)
             ci = int(round(col))
             ri = int(round(row))
-            if (
-                illum_map is not None
-                and 0 <= ri < illum_map.shape[0]
-                and 0 <= ci < illum_map.shape[1]
-            ):
+            if illum_map is not None and 0 <= ri < illum_map.shape[0] and 0 <= ci < illum_map.shape[1]:
                 illum = float(illum_map[ri, ci])
                 if np.isfinite(illum):
-                    energy_j_per_m2 += illum * float(dt)
+                    energy_j_per_m2 += illum * dt
 
-        # Battery drain for this segment: idle + driving power used
+        # Battery drain: idle + actual driving power
         p_used = f_drive * v_eff if f_drive > 0 else 0.0
         battery_energy_used_j += (idle_w + p_used) * dt
         if battery_energy_used_j >= batt_cap_j:
-            failure_xy = [float(pts_xyz[i + 1, 0]), float(pts_xyz[i + 1, 1])]
-            velocity_profile[-1][2] = 0.0  # mark this point as stopped
-            batt_remaining_pct = 0.0
-            min_v = min(min_v, 0.0)
-            return {
-                "traverse_feasible": 0.0,
-                "traversal_time_s": float("inf"),
-                "average_velocity_mps": 0.0,
-                "min_velocity_mps": 0.0,
-                "max_velocity_mps": float(max_v),
-                "solar_energy_per_m2_j": float(energy_j_per_m2),
-                "avg_solar_illumination_w_per_m2": 0.0,
-                "failure_xy": failure_xy,
-                "failure_reason": "Battery depleted",
-                "path_velocity_profile": velocity_profile,
-                "battery_energy_used_j": float(battery_energy_used_j),
-                "battery_remaining_pct": float(batt_remaining_pct),
-                "battery_capacity_wh": float(rover.battery_capacity_wh),
-            }
+            failure_reason = "Battery depleted"
+            failure_xy = [cx, cy]
+            velocity_profile.append([cx, cy, 0.0])
+            v = 0.0
+            break
 
-        v = v_next
-        # Record velocity at the end of this segment (point i+1)
-        velocity_profile.append([float(pts_xyz[i + 1, 0]), float(pts_xyz[i + 1, 1]), v])
+        # Check stagnation (stuck)
+        if step_dist < 0.0001:
+            stagnation += 1
+            if stagnation > 5000:
+                failure_reason = "Insufficient traction or power to make progress"
+                failure_xy = [cx, cy]
+                velocity_profile.append([cx, cy, 0.0])
+                v = 0.0
+                break
+        else:
+            stagnation = 0
+
+        v = v_new
+
+        # Move to next segment if this one is done — record profile point at boundary
+        if seg_progress >= s:
+            seg_progress = 0.0
+            seg_i += 1
+            pid.reset()
+            # Record endpoint of this segment / start of next
+            idx = min(seg_i, len(pts_xyz) - 1)
+            velocity_profile.append([float(pts_xyz[idx, 0]), float(pts_xyz[idx, 1]), v])
 
     if t_total <= 0.0:
         avg_v = 0.0
@@ -284,16 +331,25 @@ def simulate_rover_over_path(
     if min_v == float("inf"):
         min_v = 0.0
 
+    if failure_reason is not None and not completed:
+        feasible = 0.0
+        travel_time = float("inf")
+    else:
+        feasible = 1.0
+        travel_time = float(t_total)
+
     batt_remaining_pct = max(0.0, (batt_cap_j - battery_energy_used_j) / max(batt_cap_j, 1.0) * 100.0) if batt_cap_j > 0 else 100.0
 
     return {
-        "traverse_feasible": 1.0,
-        "traversal_time_s": float(t_total),
+        "traverse_feasible": feasible,
+        "traversal_time_s": travel_time,
         "average_velocity_mps": float(avg_v),
         "min_velocity_mps": float(min_v),
         "max_velocity_mps": float(max_v),
         "solar_energy_per_m2_j": float(energy_j_per_m2),
         "avg_solar_illumination_w_per_m2": float(avg_illum),
+        "failure_xy": failure_xy,
+        "failure_reason": failure_reason,
         "path_velocity_profile": velocity_profile,
         "battery_energy_used_j": float(battery_energy_used_j),
         "battery_remaining_pct": float(batt_remaining_pct),

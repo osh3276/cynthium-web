@@ -63,6 +63,8 @@ export interface RoverSettings {
 	rolling_resistance_coeff: number;
 	battery_capacity_wh: number;
 	idle_drain_w: number;
+	target_cruise_speed_mps: number;
+	max_brake_decel_mps2: number;
 }
 
 export interface TraversalSubscores {

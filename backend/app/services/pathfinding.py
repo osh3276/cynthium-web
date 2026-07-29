@@ -246,6 +246,8 @@ def compute_autodesign(
     rover_crr: float = 0.1,
     rover_battery_capacity_wh: float = 500.0,
     rover_idle_drain_w: float = 10.0,
+    rover_target_cruise_speed_mps: float = 2.0,
+    rover_max_brake_decel_mps2: float = 1.0,
     max_attempts: int = 10,
 ) -> dict:
     """Compute a path and validate it via simulation with the rover params."""
@@ -330,6 +332,8 @@ def compute_autodesign(
             rolling_resistance_coeff=rover_crr,
             battery_capacity_wh=rover_battery_capacity_wh,
             idle_drain_w=rover_idle_drain_w,
+            target_cruise_speed_mps=rover_target_cruise_speed_mps,
+            max_brake_decel_mps2=rover_max_brake_decel_mps2,
         )
         try:
             result = run_simulation(site_name, site_path_xy, rover)

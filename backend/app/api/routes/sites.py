@@ -22,6 +22,8 @@ class AutodesignRequest(BaseModel):
 			rover_crr: float = 0.1
 			rover_battery_capacity_wh: float = 500.0
 			rover_idle_drain_w: float = 10.0
+			rover_target_cruise_speed_mps: float = 2.0
+			rover_max_brake_decel_mps2: float = 1.0
 			max_attempts: int = 10
 
 
@@ -33,6 +35,8 @@ class SimulateRequest(BaseModel):
 		rover_crr: float = 0.1
 		rover_battery_capacity_wh: float = 500.0
 		rover_idle_drain_w: float = 10.0
+		rover_target_cruise_speed_mps: float = 2.0
+		rover_max_brake_decel_mps2: float = 1.0
 
 
 @router.get("")
@@ -78,8 +82,10 @@ async def site_autodesign(site_name: str, req: AutodesignRequest):
 	    rover_power_hp=req.rover_power_hp,
 	    rover_friction_coeff=req.rover_friction_coeff,
 	    rover_crr=req.rover_crr,
-	    rover_battery_capacity_wh=req.rover_battery_capacity_wh,
-	    rover_idle_drain_w=req.rover_idle_drain_w,
+	rover_battery_capacity_wh=req.rover_battery_capacity_wh,
+	rover_idle_drain_w=req.rover_idle_drain_w,
+	rover_target_cruise_speed_mps=req.rover_target_cruise_speed_mps,
+	rover_max_brake_decel_mps2=req.rover_max_brake_decel_mps2,
 	    max_attempts=req.max_attempts,
 	)
 	if "error" in result:
@@ -102,6 +108,8 @@ async def site_simulate(site_name: str, req: SimulateRequest):
 			rolling_resistance_coeff=req.rover_crr,
 			battery_capacity_wh=req.rover_battery_capacity_wh,
 			idle_drain_w=req.rover_idle_drain_w,
+			target_cruise_speed_mps=req.rover_target_cruise_speed_mps,
+			max_brake_decel_mps2=req.rover_max_brake_decel_mps2,
 		)
 		rover.validate()
 		stats = run_simulation(site_name, req.path_xy, rover)

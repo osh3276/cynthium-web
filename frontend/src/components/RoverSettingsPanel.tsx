@@ -8,9 +8,9 @@ interface Props {
 }
 
 const PRESETS: Record<string, RoverSettings> = {
-		Custom: { mass_kg: 150, power_hp: 0.2, wheel_friction_coeff: 0.6, rolling_resistance_coeff: 0.1, battery_capacity_wh: 500, idle_drain_w: 10 },
-		"Apollo LRV": { mass_kg: 210, power_hp: 1.0, wheel_friction_coeff: 0.6, rolling_resistance_coeff: 0.021, battery_capacity_wh: 500, idle_drain_w: 10 },
-		"Artemis SR": { mass_kg: 530, power_hp: 0.72, wheel_friction_coeff: 0.7, rolling_resistance_coeff: 0.15, battery_capacity_wh: 500, idle_drain_w: 10 },
+		Custom: { mass_kg: 150, power_hp: 0.2, wheel_friction_coeff: 0.6, rolling_resistance_coeff: 0.1, battery_capacity_wh: 500, idle_drain_w: 10, target_cruise_speed_mps: 2, max_brake_decel_mps2: 1 },
+		"Apollo LRV": { mass_kg: 210, power_hp: 1.0, wheel_friction_coeff: 0.6, rolling_resistance_coeff: 0.021, battery_capacity_wh: 500, idle_drain_w: 10, target_cruise_speed_mps: 2, max_brake_decel_mps2: 1 },
+		"Artemis SR": { mass_kg: 530, power_hp: 0.72, wheel_friction_coeff: 0.7, rolling_resistance_coeff: 0.15, battery_capacity_wh: 500, idle_drain_w: 10, target_cruise_speed_mps: 2, max_brake_decel_mps2: 1 },
 	};
 
 type Field = keyof RoverSettings;
@@ -23,6 +23,8 @@ export default function RoverSettingsPanel({ settings, onChange, readOnly }: Pro
 		rolling_resistance_coeff: String(settings.rolling_resistance_coeff),
 		battery_capacity_wh: String(settings.battery_capacity_wh),
 		idle_drain_w: String(settings.idle_drain_w),
+		target_cruise_speed_mps: String(settings.target_cruise_speed_mps),
+		max_brake_decel_mps2: String(settings.max_brake_decel_mps2),
 	}));
 
 	// Sync local strings when settings change externally (preset, game init, etc.)
@@ -35,6 +37,8 @@ export default function RoverSettingsPanel({ settings, onChange, readOnly }: Pro
 				rolling_resistance_coeff: String(settings.rolling_resistance_coeff),
 				battery_capacity_wh: String(settings.battery_capacity_wh),
 				idle_drain_w: String(settings.idle_drain_w),
+				target_cruise_speed_mps: String(settings.target_cruise_speed_mps),
+				max_brake_decel_mps2: String(settings.max_brake_decel_mps2),
 			};
 			// Only update if different — don't clobber in-progress typing
 			if (
@@ -43,7 +47,9 @@ export default function RoverSettingsPanel({ settings, onChange, readOnly }: Pro
 				prev.wheel_friction_coeff === next.wheel_friction_coeff &&
 				prev.rolling_resistance_coeff === next.rolling_resistance_coeff &&
 				prev.battery_capacity_wh === next.battery_capacity_wh &&
-				prev.idle_drain_w === next.idle_drain_w
+				prev.idle_drain_w === next.idle_drain_w &&
+				prev.target_cruise_speed_mps === next.target_cruise_speed_mps &&
+				prev.max_brake_decel_mps2 === next.max_brake_decel_mps2
 			) {
 				return prev;
 			}
@@ -87,6 +93,8 @@ export default function RoverSettingsPanel({ settings, onChange, readOnly }: Pro
 			&& p.rolling_resistance_coeff === settings.rolling_resistance_coeff
 			&& p.battery_capacity_wh === settings.battery_capacity_wh
 			&& p.idle_drain_w === settings.idle_drain_w
+			&& p.target_cruise_speed_mps === settings.target_cruise_speed_mps
+			&& p.max_brake_decel_mps2 === settings.max_brake_decel_mps2
 	)?.[0] ?? "Custom";
 
 	return (
@@ -188,6 +196,36 @@ export default function RoverSettingsPanel({ settings, onChange, readOnly }: Pro
 						value={fieldStrings.idle_drain_w}
 						onChange={handleChange("idle_drain_w")}
 						onBlur={() => commitField("idle_drain_w")}
+					/>
+				)}
+			</div>
+
+			<div className="field-row">
+				<label className="field-label">Cruise speed (m/s):</label>
+				{readOnly ? (
+					<span className="field-value-text">{settings.target_cruise_speed_mps}</span>
+				) : (
+					<input
+						className="field-input"
+						type="text"
+						value={fieldStrings.target_cruise_speed_mps}
+						onChange={handleChange("target_cruise_speed_mps")}
+						onBlur={() => commitField("target_cruise_speed_mps")}
+					/>
+				)}
+			</div>
+
+			<div className="field-row">
+				<label className="field-label">Max brake decel (m/s²):</label>
+				{readOnly ? (
+					<span className="field-value-text">{settings.max_brake_decel_mps2}</span>
+				) : (
+					<input
+						className="field-input"
+						type="text"
+						value={fieldStrings.max_brake_decel_mps2}
+						onChange={handleChange("max_brake_decel_mps2")}
+						onBlur={() => commitField("max_brake_decel_mps2")}
 					/>
 				)}
 			</div>
