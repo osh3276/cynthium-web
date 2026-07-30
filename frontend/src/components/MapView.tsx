@@ -76,8 +76,8 @@ function turboNormFromRGB(r: number, g: number, b: number): number {
 	return best;
 }
 
-/** Scale factor for animation speed (90x real-time so it's visible in a few seconds). */
-const ROVER_ANIMATION_SPEED = 90;
+/** Scale factor for animation speed (270x real-time). */
+const ROVER_ANIMATION_SPEED = 270;
 
 interface Props {
 		mapData: MapPayload | null;
