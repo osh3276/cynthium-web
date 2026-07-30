@@ -103,6 +103,23 @@ export interface GameRound {
 	autoScore: number;
 }
 
+export interface GameDefinition {
+	filename: string;
+	name: string;
+	description: string;
+	roundCount: number;
+}
+
+export interface GameData {
+	name: string;
+	description: string;
+	rounds: {
+		siteName: string;
+		mapType: string;
+		waypoints: Waypoint[];
+	}[];
+}
+
 export interface GameState {
 	active: boolean;
 	rounds: GameRound[];

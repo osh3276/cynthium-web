@@ -1,6 +1,8 @@
-import type { GameState } from "../types";
+import { useState, useCallback } from "react";
+import type { GameState, GameDefinition, GameData } from "../types";
 import GameResultDialog from "./components/GameResultDialog";
 import GameFinishDialog from "./components/GameFinishDialog";
+import { fetchGameData } from "./api";
 
 interface Props {
 	gameState: GameState | null;
@@ -9,10 +11,13 @@ interface Props {
 	showGameFinish: boolean;
 	gameLoading: boolean;
 	showHowToPlay: boolean;
+	showGamePicker: boolean;
+	availableGames: GameDefinition[];
 	onCloseGameResult: () => void;
 	onAdvanceRound: () => void;
 	onGameFinish: () => void;
 	onDismissHowToPlay: () => void;
+	onPickGame: (gameData: GameData) => void;
 }
 
 export default function Game({
@@ -22,13 +27,81 @@ export default function Game({
 	showGameFinish,
 	gameLoading,
 	showHowToPlay,
+	showGamePicker,
+	availableGames,
 	onCloseGameResult,
 	onAdvanceRound,
 	onGameFinish,
 	onDismissHowToPlay,
+	onPickGame,
 }: Props) {
+	const [loadingGameName, setLoadingGameName] = useState<string | null>(null);
+
+	const handlePickGame = useCallback(async (def: GameDefinition) => {
+		setLoadingGameName(def.name);
+		const data = await fetchGameData(def.filename);
+		if (data) {
+			onPickGame(data);
+		} else {
+			alert(`Failed to load game "${def.name}". Check the file and try again.`);
+		}
+		setLoadingGameName(null);
+	}, [onPickGame]);
+
 	return (
 		<>
+			{showGamePicker && !gameLoading && (
+				<div className="dialog-overlay">
+					<div className="dialog">
+						<div className="dialog-title">Select Game</div>
+						<div style={{ fontSize: 12, color: "#a8b2d1", marginBottom: 12 }}>
+							Pick a scenario set.
+						</div>
+						{availableGames.length === 0 ? (
+							<div style={{ fontSize: 12, color: "#e53935", fontStyle: "italic" }}>
+								No game files found in backend/data/games/.
+							</div>
+						) : (
+							<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+								{availableGames.map((g) => (
+									<button
+										key={g.filename}
+										className="panel-button generate-button"
+										style={{ textAlign: "left", padding: "8px 12px", height: "auto" }}
+										onClick={() => handlePickGame(g)}
+										disabled={loadingGameName === g.name}
+									>
+										<div style={{ fontWeight: 700, fontSize: 13 }}>{g.name}</div>
+										<div style={{ fontSize: 11, color: "#a8b2d1", marginTop: 2 }}>
+											{g.description || "No description"}
+										</div>
+										<div style={{ fontSize: 10, color: "#64ffda", marginTop: 2 }}>
+											{g.roundCount} round{g.roundCount !== 1 ? "s" : ""}
+										</div>
+									</button>
+								))}
+							</div>
+						)}
+						<button
+							className="dialog-button"
+							onClick={onGameFinish}
+							style={{ marginTop: 12 }}
+						>
+							Back
+						</button>
+					</div>
+				</div>
+			)}
+			{loadingGameName && (
+				<div className="dialog-overlay">
+					<div className="dialog" style={{ alignItems: "center" }}>
+						<div className="dialog-title">Loading {loadingGameName}...</div>
+						<div style={{ fontSize: 12, color: "#a8b2d1", marginTop: 8 }}>
+							this may take a while
+						</div>
+					</div>
+				</div>
+			)}
 			{showGameResult && currentRound && gameState && (
 				<GameResultDialog
 					round={gameState.currentRound + 1}
@@ -100,7 +173,7 @@ export default function Game({
 							<p style={{ marginBottom: 8 }}>
 								Scores are based on path efficiency, energy
 								economy, illumination, meteor safety, traction
-								match, and power match across 5 rounds.
+								match, and power match.
 							</p>
 						</div>
 						<button className="dialog-button" onClick={onDismissHowToPlay}>

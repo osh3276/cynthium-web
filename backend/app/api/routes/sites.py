@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
@@ -8,6 +11,48 @@ from app.services.site_rasters import get_site_center_lonlat, get_site_map, list
 from app.services.sun_position import sun_position
 
 router = APIRouter(prefix="/sites", tags=["sites"])
+
+GAMES_DIR = Path(__file__).resolve().parents[3] / "data" / "games"
+
+
+@router.get("/games")
+async def list_games():
+    """List available game definition files."""
+    if not GAMES_DIR.is_dir():
+        return {"games": []}
+    files = []
+    for f in sorted(GAMES_DIR.glob("*.json")):
+        try:
+            with open(f) as fh:
+                data = json.load(fh)
+            files.append({
+                "filename": f.name,
+                "name": data.get("name", f.stem),
+                "description": data.get("description", ""),
+                "roundCount": len(data.get("rounds", [])),
+            })
+        except Exception:
+            pass
+    return {"games": files}
+
+
+@router.get("/games/{filename}")
+async def get_game(filename: str):
+    """Load a specific game definition file."""
+    # Prevent path traversal
+    if ".." in filename or "/" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    filepath = GAMES_DIR / filename
+    if not filepath.is_file():
+        raise HTTPException(status_code=404, detail=f"Game '{filename}' not found")
+    try:
+        with open(filepath) as f:
+            data = json.load(f)
+        return data
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON in '{filename}'")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class AutodesignRequest(BaseModel):

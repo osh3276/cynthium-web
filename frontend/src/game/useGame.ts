@@ -7,12 +7,11 @@ import type {
 	GameState,
 	GameRound,
 	MapPayload,
+	GameData,
 } from "../types";
 import type { LoadStatus } from "../App";
-import { SITE_PRESETS } from "../constants";
 import { CURIOSITY, ARTEMIS_SR } from "./roverPresets";
-import { shufflePick } from "./utils";
-import { generateRoundPoints, precalcRound, simulateSegment, findNearestUserWps } from "./api";
+import { precalcRound, simulateSegment, findNearestUserWps } from "./api";
 
 interface UseGameDeps {
 	loadSiteMap: (siteName: string, mapType: string, date: string) => Promise<void>;
@@ -57,41 +56,34 @@ export function useGame(deps: UseGameDeps) {
 	const [showGameFinish, setShowGameFinish] = useState(false);
 	const [gameLoading, setGameLoading] = useState(false);
 	const [showHowToPlay, setShowHowToPlay] = useState(false);
+	// Game picker state
+	const [showGamePicker, setShowGamePicker] = useState(true);
+	const [, setGameName] = useState("");
 	const resultTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const handleCloseGameResult = useCallback(() => {
 		setShowGameResult(false);
 	}, []);
 
-	const handleStartGame = useCallback(async () => {
+	/**
+	 * Start a game from a loaded GameData definition.
+	 * Creates rounds and pre-calculates auto paths.
+	 */
+	const handleStartGame = useCallback(async (gameData: GameData) => {
 		setGameLoading(true);
+		setGameName(gameData.name);
 		try {
-			const siteNames = Object.keys(SITE_PRESETS);
-			const picked = shufflePick(
-				siteNames,
-				Math.min(5, siteNames.length),
-			);
-
-			// Create rounds and pre-generate all start/end points
-			const roundPromises = picked.map(async (name) => {
-				const round: GameRound = {
-					siteName: name,
-					mapType: mapTypeRef.current,
-					waypoints: [],
-					userPath: [],
-					autoPath: null,
-					userStats: null,
-					autoStats: null,
-					userScore: 0,
-					autoScore: 0,
-				};
-				const pts = await generateRoundPoints(round);
-				if (pts) {
-					round.waypoints = pts;
-				}
-				return round;
-			});
-			const rounds = await Promise.all(roundPromises);
+			const rounds: GameRound[] = gameData.rounds.map((r) => ({
+				siteName: r.siteName,
+				mapType: r.mapType,
+				waypoints: r.waypoints,
+				userPath: [],
+				autoPath: null,
+				userStats: null,
+				autoStats: null,
+				userScore: 0,
+				autoScore: 0,
+			}));
 
 			setRoverSettings(ARTEMIS_SR);
 			setGameState({
@@ -102,6 +94,7 @@ export function useGame(deps: UseGameDeps) {
 			});
 			setShowGameResult(false);
 			setShowGameFinish(false);
+			setShowGamePicker(false);
 			setWaypoints([]);
 			setAutodesignResult(null);
 			setManualStats(null);
@@ -118,7 +111,7 @@ export function useGame(deps: UseGameDeps) {
 			setGameLoading(false);
 			setShowHowToPlay(true);
 		}
-	}, [loadSiteMap, mapTypeRef, setRoverSettings, setWaypoints,
+	}, [loadSiteMap, setRoverSettings, setWaypoints,
 		setAutodesignResult, setManualStats, setAutoStats]);
 
 	const advanceRound = useCallback(async () => {
@@ -373,6 +366,7 @@ export function useGame(deps: UseGameDeps) {
 		setCurrentSite("");
 		setMapData(null);
 		setStatus("idle");
+		setShowGamePicker(true);
 		deps.onFinish?.();
 	}, [setRoverSettings, setWaypoints, setAutodesignResult,
 		setManualStats, setAutoStats, setCurrentSite, setMapData, setStatus,
@@ -399,7 +393,9 @@ export function useGame(deps: UseGameDeps) {
 		showGameFinish,
 		gameLoading,
 		showHowToPlay,
+		showGamePicker,
 		setShowHowToPlay,
+		setShowGamePicker,
 		pendingGameResult,
 		handleCloseGameResult,
 		handleStartGame,

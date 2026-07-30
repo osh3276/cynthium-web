@@ -4,7 +4,8 @@ import ViewContainer from "../components/ViewContainer";
 import GameSidebar from "./GameSidebar";
 import Game from "./Game";
 import { useGame } from "./useGame";
-import type { MapPayload, Waypoint, AutodesignResult, SimulationStats } from "../types";
+import { fetchGamesList } from "./api";
+import type { MapPayload, Waypoint, AutodesignResult, SimulationStats, GameDefinition, GameData } from "../types";
 import type { LoadStatus } from "../App";
 
 export default function GamePage() {
@@ -14,44 +15,50 @@ export default function GamePage() {
 	const [currentSite, setCurrentSite] = useState("");
 	const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
 	const [autodesignResult, setAutodesignResult] =
-		useState<AutodesignResult | null>(null);
+			useState<AutodesignResult | null>(null);
 	const [, setRoverSettings] = useState({ mass_kg: 530, power_hp: 0.72, wheel_friction_coeff: 0.7, rolling_resistance_coeff: 0.15, battery_capacity_wh: 500, idle_drain_w: 10, target_cruise_speed_mps: 2, max_brake_decel_mps2: 1 });
 	const [manualStats, setManualStats] = useState<SimulationStats | null>(null);
 	const [autoStats, setAutoStats] = useState<SimulationStats | null>(null);
 	const [simulating, setSimulating] = useState(false);
 	const loadedSiteRef = useRef("");
 	const mapTypeRef = useRef("Elevation");
+	const [availableGames, setAvailableGames] = useState<GameDefinition[]>([]);
+
+	// Fetch available games on mount
+	useEffect(() => {
+		fetchGamesList().then((games) => setAvailableGames(games));
+	}, []);
 
 	const loadSiteMap = useCallback(
-		async (siteName: string, mapType: string, date: string) => {
-			loadedSiteRef.current = siteName;
-			setCurrentSite(siteName);
-			setStatus("loading");
-			setWaypoints([]);
-			setAutodesignResult(null);
-			setManualStats(null);
-			setAutoStats(null);
-			try {
-				const params = new URLSearchParams({ map_type: mapType, date });
-				const res = await fetch(
-					`/api/sites/${encodeURIComponent(siteName)}/map?${params}`,
-				);
-				if (!res.ok) throw new Error(await res.text());
-				const data: MapPayload = await res.json();
-				setMapData(data);
-				setStatus("loaded");
-			} catch (err) {
-				setStatus("error");
-				const msg = err instanceof Error ? err.message : String(err);
+			async (siteName: string, mapType: string, date: string) => {
+				loadedSiteRef.current = siteName;
+				setCurrentSite(siteName);
+				setStatus("loading");
+				setWaypoints([]);
+				setAutodesignResult(null);
+				setManualStats(null);
+				setAutoStats(null);
 				try {
-					const parsed = JSON.parse(msg);
-					if (parsed.detail) alert(parsed.detail);
-					else alert(msg);
-				} catch { alert(msg); }
-			}
-		},
-		[],
-	);
+					const params = new URLSearchParams({ map_type: mapType, date });
+					const res = await fetch(
+						`/api/sites/${encodeURIComponent(siteName)}/map?${params}`,
+					);
+					if (!res.ok) throw new Error(await res.text());
+					const data: MapPayload = await res.json();
+					setMapData(data);
+					setStatus("loaded");
+				} catch (err) {
+					setStatus("error");
+					const msg = err instanceof Error ? err.message : String(err);
+					try {
+						const parsed = JSON.parse(msg);
+						if (parsed.detail) alert(parsed.detail);
+						else alert(msg);
+					} catch { alert(msg); }
+				}
+			},
+			[],
+		);
 
 	const {
 		gameState,
@@ -60,6 +67,7 @@ export default function GamePage() {
 		showGameFinish,
 		gameLoading,
 		showHowToPlay,
+		showGamePicker,
 		setShowHowToPlay,
 		handleCloseGameResult,
 		handleStartGame,
@@ -130,20 +138,15 @@ export default function GamePage() {
 		setAutoStats(null);
 	}, [showGameResult, showGameFinish]);
 
-const handleChangeMapType = useCallback(
-	(mapType: string, date: string) => {
-		mapTypeRef.current = mapType;
-		if (currentSite) {
-			loadSiteMap(currentSite, mapType, date);
-		}
-	},
-	[currentSite, loadSiteMap],
-);
-
-// Auto-start game on mount
-useEffect(() => {
-	handleStartGame();
-}, []); // eslint-disable-line react-hooks/exhaustive-deps
+	const handleChangeMapType = useCallback(
+		(mapType: string, date: string) => {
+			mapTypeRef.current = mapType;
+			if (currentSite) {
+				loadSiteMap(currentSite, mapType, date);
+			}
+		},
+		[currentSite, loadSiteMap],
+	);
 
 	return (
 		<div className="app-layout">
@@ -198,10 +201,13 @@ useEffect(() => {
 				showGameFinish={showGameFinish}
 				gameLoading={gameLoading}
 				showHowToPlay={showHowToPlay}
+				showGamePicker={showGamePicker}
+				availableGames={availableGames}
 				onCloseGameResult={handleCloseGameResult}
 				onAdvanceRound={advanceRound}
 				onGameFinish={handleGameFinish}
 				onDismissHowToPlay={() => setShowHowToPlay(false)}
+				onPickGame={(gameData: GameData) => handleStartGame(gameData)}
 			/>
 		</div>
 	);

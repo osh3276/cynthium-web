@@ -1,0 +1,34 @@
+{
+  "name": "Beginner's Luck",
+  "description": "Three straightforward traverses across Haworth and Amundsen. Good for learning the ropes.",
+  "rounds": [
+    {
+      "siteName": "Haworth",
+      "mapType": "Elevation",
+      "waypoints": [
+        {"x": -36000, "y": 92000},
+        {"x": -33000, "y": 89000},
+        {"x": -35000, "y": 86000}
+      ]
+    },
+    {
+      "siteName": "Amundsen rim",
+      "mapType": "Elevation",
+      "waypoints": [
+        {"x": 164000, "y": 61500},
+        {"x": 162000, "y": 63500},
+        {"x": 160000, "y": 61000},
+        {"x": 158000, "y": 62500}
+      ]
+    },
+    {
+      "siteName": "Shoemaker",
+      "mapType": "Elevation",
+      "waypoints": [
+        {"x": 76000, "y": 39000},
+        {"x": 79000, "y": 36000},
+        {"x": 82000, "y": 40000}
+      ]
+    }
+  ]
+}
