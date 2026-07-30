@@ -167,15 +167,25 @@ export async function precalcRound(
 		const segResults: (SimulationStats | null)[] = await Promise.all(segmentPromises);
 		const scores: number[] = segResults
 			.map((s: SimulationStats | null) => (s ? (s["traversal_score"] as number) || 0 : 0));
-		const avgScore: number =
+		const totalScore: number =
 			scores.length > 0
-				? scores.reduce((a: number, b: number) => a + b, 0) / scores.length
+				? scores.reduce((a: number, b: number) => a + b, 0)
 				: 0;
 
-		// Use the FIRST segment's stats for display (velocity profile, etc.)
-		// and store the averaged score
-		const displayStats = segResults[0] || {};
-		displayStats["traversal_score"] = avgScore;
+		// Grade from percentage of max possible score
+		const maxPossible = scores.length * 1000;
+		const pct = maxPossible > 0 ? (totalScore / maxPossible) * 100 : 0;
+		const grade =
+			pct >= 95 ? "S" : pct >= 90 ? "A" : pct >= 80 ? "B" : pct >= 70 ? "C" : pct >= 50 ? "D" : "F";
+
+		// Simulate the combined auto path for display (full velocity profile)
+		const combinedStats = await simulateSegment(
+			siteName,
+			autoData.path_xy as [number, number][],
+		);
+		const displayStats = combinedStats || segResults[0] || {};
+		displayStats["traversal_score"] = totalScore;
+		displayStats["traversal_grade"] = grade;
 		round.autoStats = displayStats as SimulationStats;
 	} catch {}
 }

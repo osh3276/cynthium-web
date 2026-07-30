@@ -10,7 +10,7 @@ import type {
 import type { LoadStatus } from "../App";
 
 /** Scale factor for animation speed - must match MapView value. */
-const ROVER_ANIMATION_SPEED = 500;
+const ROVER_ANIMATION_SPEED = 270;
 
 interface Props {
 	mapData: MapPayload | null;

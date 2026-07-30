@@ -261,22 +261,23 @@ export function useGame(deps: UseGameDeps) {
 				);
 			}
 
-			// Auto scores (already per-segment from precalcRound)
+			// Auto scores (stored as sum + grade from precalcRound)
 			const autoStats: SimulationStats = round.autoStats || {};
-			const autoFeasible =
-				(autoStats["traverse_feasible"] as number) >= 0.5;
-			const autoScore = autoFeasible
-				? (autoStats["traversal_score"] as number) || 0
-				: 0;
+			const autoScore = (autoStats["traversal_score"] as number) || 0;
+			const autoGrade = (autoStats["traversal_grade"] as string) || "F";
 
-			// Average user segment scores
-			const userAvgScore =
+			// Sum user segment scores
+			const userTotal =
 				userScores.length > 0
-					? userScores.reduce((a, b) => a + b, 0) / userScores.length
+					? userScores.reduce((a, b) => a + b, 0)
 					: 0;
+			const userMax = userScores.length * 1000;
+			const userPct = userMax > 0 ? (userTotal / userMax) * 100 : 0;
+			const userGrade =
+				userPct >= 95 ? "S" : userPct >= 90 ? "A" : userPct >= 80 ? "B" : userPct >= 70 ? "C" : userPct >= 50 ? "D" : "F";
 
 			const anyUserFeasible = userFeasibles.some(Boolean);
-			const bothFailed = !anyUserFeasible && !autoFeasible;
+			const bothFailed = !anyUserFeasible && autoScore <= 0;
 
 			if (bothFailed) {
 				const failDistScore = (
@@ -292,36 +293,38 @@ export function useGame(deps: UseGameDeps) {
 					const progress = 1 - Math.min(distToEnd / totalDist, 1);
 					return Math.round(progress * 1000);
 				};
-				// Average fail distance across segments
+				// Sum fail distance across segments
 				let totalUserFailScore = 0;
-				let failCount = 0;
 				for (let i = 0; i < segResults.length; i++) {
 					const reqA = required[i];
 					const reqB = required[i + 1];
 					if (reqA && reqB) {
 						totalUserFailScore += failDistScore(segResults[i], reqA, reqB);
-						failCount++;
 					}
 				}
-				round.userScore = failCount > 0 ? Math.round(totalUserFailScore / failCount) : 0;
-
-				// For auto, use the score from autoStats (already averaged in precalcRound)
-				round.autoScore = autoFeasible
-					? (autoStats["traversal_score"] as number) || 0
-					: 0;
+				// Cap fail score to max possible for display
+				round.userScore = Math.min(totalUserFailScore, userMax);
+				round.autoScore = autoScore;
 			} else {
-				round.userScore = anyUserFeasible
-					? Math.round(userAvgScore)
-					: 0;
-				round.autoScore = autoFeasible
-					? Math.round(autoScore)
-					: 0;
+				round.userScore = anyUserFeasible ? Math.round(userTotal) : 0;
+				round.autoScore = Math.round(autoScore);
 			}
 
 			round.userPath = waypoints;
-			round.userStats = firstStats || {};
-			setManualStats(firstStats);
 
+			// Simulate the full combined user path for display (animation velocity profile)
+			const combinedPath = waypoints.map((wp) => [wp.x, wp.y] as [number, number]);
+			const displayStats = await simulateSegment(currentSite, combinedPath);
+			const finalStats = displayStats || firstStats || {};
+			finalStats["traversal_score"] = round.userScore;
+			finalStats["traversal_grade"] = userGrade;
+			round.userStats = finalStats;
+			setManualStats(finalStats);
+
+			// Update autoStats to carry the per-segment auto grade
+			if (round.autoStats) {
+				round.autoStats["traversal_grade"] = autoGrade;
+			}
 			setAutoStats(Object.keys(autoStats).length > 0 ? autoStats : null);
 			if (round.autoPath) {
 				setAutodesignResult({
