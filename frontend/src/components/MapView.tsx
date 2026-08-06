@@ -5,7 +5,7 @@ import {
 	useCallback,
 	useLayoutEffect,
 } from "react";
-import { type ReactElement } from "react";
+import { type ReactElement, type ReactNode } from "react";
 import type {
 	MapPayload,
 	Waypoint,
@@ -92,6 +92,37 @@ interface Props {
 		onAnimationsComplete?: () => void;
 	}
 
+	/**
+	 * Renders children at a constant on-screen size regardless of map zoom.
+	 *
+	 * The map content div is scaled by `scale` via a CSS transform, which also
+	 * scales everything inside it. This wrapper counter-scales by 1/scale (read
+	 * from the `--inv-scale` custom property, kept in sync by `applyTransform`)
+	 * while anchoring the child geometry at image position (x, y). Child
+	 * coordinates are therefore in screen pixels relative to that anchor.
+	 */
+	function FixedSize({
+		x,
+		y,
+		children,
+	}: {
+		x: number;
+		y: number;
+		children: ReactNode;
+	}) {
+		return (
+			<g
+				style={{
+					transform: `translate(${x}px, ${y}px) scale(var(--inv-scale))`,
+					transformOrigin: "0 0",
+					transformBox: "view-box",
+				}}
+			>
+				{children}
+			</g>
+		);
+	}
+
 export default function MapView({
 		mapData,
 		status,
@@ -127,6 +158,15 @@ export default function MapView({
 		const { x, y } = pos.current;
 		const s = scale.current;
 		el.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+		// Counter-scale for overlay elements so they keep a fixed on-screen size
+		el.style.setProperty("--inv-scale", `${1 / s}`);
+		// Stroke widths / dash pattern for polylines (which keep image-coord
+		// vertices inside the scaled container): express the desired screen-px
+		// size in user units, i.e. divided by `s`, so the container's scale(s)
+		// restores exactly the intended thickness.
+		el.style.setProperty("--sw-2", `${2 / s}px`);
+		el.style.setProperty("--sw-4", `${4 / s}px`);
+		el.style.setProperty("--dash-6-3", `${6 / s}px ${3 / s}px`);
 	}, []);
 
 	// Load image
@@ -477,6 +517,19 @@ export default function MapView({
 		onAnimationsComplete,
 	]);
 
+	// Waypoint path points in image coords (used by the connection lines)
+	const pathPts: [number, number][] = waypoints.map((wp, i) => {
+		const isDragged = dragWpIndex.current === i && dragWpPos != null;
+		const p = isDragged ? dragWpPos : wp;
+		const b = mapData?.bounds;
+		if (!b) return [0, 0];
+		return [
+			((p.x - b.left) / (b.right - b.left)) * imgNatural.w,
+			imgNatural.h -
+				((p.y - b.bottom) / (b.top - b.bottom)) * imgNatural.h,
+		];
+	});
+
 	return (
 		<div
 			className="map-view"
@@ -577,18 +630,18 @@ export default function MapView({
 								const isLast = idx === gameWaypoints.length - 1;
 								const fill = isFirst ? "#4fc3f7" : isLast ? "#e53935" : "#ffb74d";
 								return (
-									<g key={idx}>
+									<FixedSize key={idx} x={ix} y={iy}>
 										<rect
-											x={ix - 8}
-											y={iy - 8}
+											x={-8}
+											y={-8}
 											width={16}
 											height={16}
 											fill={fill}
 											rx={2}
 										/>
 										<text
-											x={ix}
-											y={iy + 3}
+											x={0}
+											y={3}
 											textAnchor="middle"
 											fill="white"
 											fontSize={9}
@@ -596,7 +649,7 @@ export default function MapView({
 										>
 											{idx + 1}
 										</text>
-									</g>
+									</FixedSize>
 								);
 							})}
 							{/* Outline stroke for the dotted line — renders underneath */}
@@ -604,24 +657,10 @@ export default function MapView({
 								<polyline
 									fill="none"
 									stroke="rgba(0,0,0,0.6)"
-									strokeWidth={4}
 									strokeLinecap="round"
-									points={waypoints
-										.map((wp, i) => {
-											const isDragged = dragWpIndex.current === i && dragWpPos != null;
-											const p = isDragged ? dragWpPos : wp;
-											const b = mapData!.bounds;
-											const ix =
-												((p.x - b.left) /
-													(b.right - b.left)) *
-												imgNatural.w;
-											const iy =
-												imgNatural.h -
-												((p.y - b.bottom) /
-													(b.top - b.bottom)) *
-													imgNatural.h;
-											return `${ix},${iy}`;
-										})
+									style={{ strokeWidth: "var(--sw-4)" }}
+									points={pathPts
+										.map(([x, y]) => `${x},${y}`)
 										.join(" ")}
 								/>
 							)}
@@ -630,38 +669,29 @@ export default function MapView({
 								<polyline
 									fill="none"
 									stroke="white"
-									strokeWidth={2}
-									strokeDasharray="6,3"
-									points={waypoints
-										.map((wp, i) => {
-											const isDragged = dragWpIndex.current === i && dragWpPos != null;
-											const p = isDragged ? dragWpPos : wp;
-											const b = mapData!.bounds;
-											const ix =
-												((p.x - b.left) /
-													(b.right - b.left)) *
-												imgNatural.w;
-											const iy =
-												imgNatural.h -
-												((p.y - b.bottom) /
-													(b.top - b.bottom)) *
-													imgNatural.h;
-											return `${ix},${iy}`;
-										})
+									style={{
+										strokeWidth: "var(--sw-2)",
+										strokeDasharray: "var(--dash-6-3)",
+									}}
+									points={pathPts
+										.map(([x, y]) => `${x},${y}`)
 										.join(" ")}
 								/>
 							)}
 							{/* Cursor hint when hovering near a waypoint */}
 							{dragWpIndex.current != null && dragWpPos && (
-								<circle
-									cx={((dragWpPos.x - mapData!.bounds.left) / (mapData!.bounds.right - mapData!.bounds.left)) * imgNatural.w}
-									cy={imgNatural.h - ((dragWpPos.y - mapData!.bounds.bottom) / (mapData!.bounds.top - mapData!.bounds.bottom)) * imgNatural.h}
-									r={8}
-									fill="none"
-									stroke="#4fc3f7"
-									strokeWidth={2}
-									strokeDasharray="4,2"
-								/>
+								<FixedSize
+									x={((dragWpPos.x - mapData!.bounds.left) / (mapData!.bounds.right - mapData!.bounds.left)) * imgNatural.w}
+									y={imgNatural.h - ((dragWpPos.y - mapData!.bounds.bottom) / (mapData!.bounds.top - mapData!.bounds.bottom)) * imgNatural.h}
+								>
+									<circle
+										r={8}
+										fill="none"
+										stroke="#4fc3f7"
+										strokeWidth={2}
+										strokeDasharray="4,2"
+									/>
+								</FixedSize>
 							)}
 							{waypoints.map((wp, i) => {
 								const isDragged = dragWpIndex.current === i && dragWpPos != null;
@@ -675,27 +705,25 @@ export default function MapView({
 									((displayWp.y - b.bottom) / (b.top - b.bottom)) *
 									imgNatural.h;
 								return (
-									<g key={i}>
+									<FixedSize key={i} x={ix} y={iy}>
 										<circle
-											cx={ix}
-											cy={iy}
-											r={isDragged ? 6 : 5}
+											r={isDragged ? 7 : 6}
 											fill={isDragged ? "#4fc3f7" : "white"}
 											stroke={isDragged ? "#0288d1" : "black"}
 											strokeWidth={1.5}
 										/>
 										<text
-											x={ix + 7}
-											y={iy + 3}
+											x={8}
+											y={4}
 											fill={isDragged ? "#4fc3f7" : "white"}
-											fontSize={10}
+											fontSize={11}
 											fontWeight={700}
 											stroke="black"
 											strokeWidth={0.5}
 										>
 											{i + 1}
 										</text>
-									</g>
+									</FixedSize>
 								);
 							})}
 							{autodesignResult &&
@@ -750,19 +778,17 @@ export default function MapView({
 										<polyline
 											fill="none"
 											stroke="#4fc3f7"
-											strokeWidth={2}
+											style={{ strokeWidth: "var(--sw-2)" }}
 											points={autoPts
 												.map((p) => {
 													const ix =
 														((p[0] - b.left) /
-															(b.right -
-																b.left)) *
+															(b.right - b.left)) *
 														imgNatural.w;
 													const iy =
 														imgNatural.h -
 														((p[1] - b.bottom) /
-															(b.top -
-																b.bottom)) *
+															(b.top - b.bottom)) *
 														imgNatural.h;
 													return `${ix},${iy}`;
 												})
@@ -781,11 +807,9 @@ export default function MapView({
 
 							{/* Animated rover dot - manual (cyan) */}
 							{roverAnim.pos && !roverAnim.done && (
-								<g>
+								<FixedSize x={roverAnim.pos.x} y={roverAnim.pos.y}>
 									{/* Glow */}
 									<circle
-										cx={roverAnim.pos.x}
-										cy={roverAnim.pos.y}
 										r={9}
 										fill={
 											roverAnim.failed
@@ -795,8 +819,6 @@ export default function MapView({
 									/>
 									{/* Core dot */}
 									<circle
-										cx={roverAnim.pos.x}
-										cy={roverAnim.pos.y}
 										r={5}
 										fill={
 											roverAnim.failed
@@ -810,16 +832,14 @@ export default function MapView({
 										}
 										strokeWidth={1.5}
 									/>
-								</g>
+								</FixedSize>
 							)}
 
 							{/* Animated rover dot - auto (orange) */}
 							{autoRoverAnim.pos && !autoRoverAnim.done && (
-								<g>
+								<FixedSize x={autoRoverAnim.pos.x} y={autoRoverAnim.pos.y}>
 									{/* Glow */}
 									<circle
-										cx={autoRoverAnim.pos.x}
-										cy={autoRoverAnim.pos.y}
 										r={9}
 										fill={
 											autoRoverAnim.failed
@@ -829,8 +849,6 @@ export default function MapView({
 									/>
 									{/* Core dot */}
 									<circle
-										cx={autoRoverAnim.pos.x}
-										cy={autoRoverAnim.pos.y}
 										r={5}
 										fill={
 											autoRoverAnim.failed
@@ -844,7 +862,7 @@ export default function MapView({
 										}
 										strokeWidth={1.5}
 									/>
-								</g>
+								</FixedSize>
 							)}
 						</svg>
 					</div>
@@ -914,31 +932,29 @@ function _renderFailureMarker(
 	const iy =
 		imgNatural.h - ((fy - b.bottom) / (b.top - b.bottom)) * imgNatural.h;
 	return (
-		<g>
+		<FixedSize x={ix} y={iy}>
 			<circle
-				cx={ix}
-				cy={iy}
 				r={5}
 				fill="none"
 				stroke="#ff1744"
 				strokeWidth={2}
 			/>
 			<line
-				x1={ix - 4}
-				y1={iy - 4}
-				x2={ix + 4}
-				y2={iy + 4}
+				x1={-4}
+				y1={-4}
+				x2={4}
+				y2={4}
 				stroke="#ff1744"
 				strokeWidth={2}
 			/>
 			<line
-				x1={ix - 4}
-				y1={iy + 4}
-				x2={ix + 4}
-				y2={iy - 4}
+				x1={-4}
+				y1={4}
+				x2={4}
+				y2={-4}
 				stroke="#ff1744"
 				strokeWidth={2}
 			/>
-		</g>
+		</FixedSize>
 	);
 }
