@@ -31,10 +31,13 @@ export default function GamePage() {
 
 	const loadSiteMap = useCallback(
 			async (siteName: string, mapType: string, date: string) => {
+				const siteChanged = siteName !== loadedSiteRef.current;
 				loadedSiteRef.current = siteName;
 				setCurrentSite(siteName);
 				setStatus("loading");
-				setWaypoints([]);
+				if (siteChanged) {
+					setWaypoints([]);
+				}
 				setAutodesignResult(null);
 				setManualStats(null);
 				setAutoStats(null);
