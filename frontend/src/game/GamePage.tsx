@@ -7,6 +7,7 @@ import { useGame } from "./useGame";
 import { fetchGamesList } from "./api";
 import type { MapPayload, Waypoint, AutodesignResult, SimulationStats, GameDefinition, GameData } from "../types";
 import type { LoadStatus } from "../App";
+import { APP_NAME, APP_TAGLINE, APP_VERSION } from "../config";
 
 export default function GamePage() {
 	const navigate = useNavigate();
@@ -155,10 +156,10 @@ export default function GamePage() {
 		<div className="app-layout">
 			<header className="app-header">
 				<div className="header-brand">
-					<span className="header-title">CYNTHIUM</span>
-					<span className="header-version">v1.0.0</span>
+					<span className="header-title">{APP_NAME}</span>
+					<span className="header-version">v{APP_VERSION}</span>
 				</div>
-				<div className="header-tagline">Lunar Route Planning System</div>
+				<div className="header-tagline">{APP_TAGLINE}</div>
 				<div className="header-glow" />
 			</header>
 			<div className="main-content">

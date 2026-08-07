@@ -12,6 +12,7 @@ import {
 	type SimulationStats,
 } from "./types";
 import { CURIOSITY } from "./game";
+import { APP_NAME, APP_TAGLINE, APP_VERSION } from "./config";
 import "./App.css";
 
 export type LoadStatus = "idle" | "loading" | "loaded" | "error";
@@ -317,10 +318,10 @@ function App() {
 		<div className="app-layout">
 			<header className="app-header">
 				<div className="header-brand">
-					<span className="header-title">CYNTHIUM</span>
-					<span className="header-version">v1.0.0</span>
+					<span className="header-title">{APP_NAME}</span>
+					<span className="header-version">v{APP_VERSION}</span>
 				</div>
-				<div className="header-tagline">Lunar Route Planning System</div>
+				<div className="header-tagline">{APP_TAGLINE}</div>
 				<div className="header-glow" />
 			</header>
 			<div className="main-content">
