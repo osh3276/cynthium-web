@@ -24,10 +24,20 @@ export default function GamePage() {
 	const loadedSiteRef = useRef("");
 	const mapTypeRef = useRef("Elevation");
 	const [availableGames, setAvailableGames] = useState<GameDefinition[]>([]);
+	const [gamesLoading, setGamesLoading] = useState(true);
 
 	// Fetch available games on mount
 	useEffect(() => {
-		fetchGamesList().then((games) => setAvailableGames(games));
+		let cancelled = false;
+		setGamesLoading(true);
+		fetchGamesList().then((games) => {
+			if (cancelled) return;
+			setAvailableGames(games);
+			setGamesLoading(false);
+		});
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	const loadSiteMap = useCallback(
@@ -207,6 +217,7 @@ export default function GamePage() {
 				showHowToPlay={showHowToPlay}
 				showGamePicker={showGamePicker}
 				availableGames={availableGames}
+				gamesLoading={gamesLoading}
 				onCloseGameResult={handleCloseGameResult}
 				onAdvanceRound={advanceRound}
 				onGameFinish={handleGameFinish}

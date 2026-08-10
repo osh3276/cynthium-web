@@ -13,6 +13,7 @@ interface Props {
 	showHowToPlay: boolean;
 	showGamePicker: boolean;
 	availableGames: GameDefinition[];
+	gamesLoading: boolean;
 	onCloseGameResult: () => void;
 	onAdvanceRound: () => void;
 	onGameFinish: () => void;
@@ -20,7 +21,7 @@ interface Props {
 	onPickGame: (gameData: GameData) => void;
 }
 
-export default function Game({
+	export default function Game({
 	gameState,
 	currentRound,
 	showGameResult,
@@ -29,6 +30,7 @@ export default function Game({
 	showHowToPlay,
 	showGamePicker,
 	availableGames,
+	gamesLoading,
 	onCloseGameResult,
 	onAdvanceRound,
 	onGameFinish,
@@ -57,7 +59,11 @@ export default function Game({
 						<div style={{ fontSize: 12, color: "#a8b2d1", marginBottom: 12 }}>
 							Pick a scenario set.
 						</div>
-						{availableGames.length === 0 ? (
+						{gamesLoading ? (
+							<div style={{ fontSize: 12, color: "#a8b2d1", fontStyle: "italic" }}>
+								Loading scenarios...
+							</div>
+						) : availableGames.length === 0 ? (
 							<div style={{ fontSize: 12, color: "#e53935", fontStyle: "italic" }}>
 								No game files found in backend/data/games/.
 							</div>
