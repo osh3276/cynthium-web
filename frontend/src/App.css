@@ -282,6 +282,8 @@ body {
 	letter-spacing: 0.3px;
 	text-transform: uppercase;
 	pointer-events: none;
+	user-select: none;
+	-webkit-user-select: none;
 	backdrop-filter: blur(4px);
 }
 
