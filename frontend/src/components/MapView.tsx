@@ -648,16 +648,6 @@ export default function MapView({
 							transformOrigin: "0 0",
 						}}
 					>
-						<img
-							src={imgSrc.current}
-							alt={mapData!.label}
-							style={{
-								display: "block",
-								maxWidth: "none",
-								userSelect: "none",
-							}}
-							draggable={false}
-						/>
 						<svg
 							style={{
 								position: "absolute",
@@ -675,6 +665,16 @@ export default function MapView({
 									transformBox: "view-box",
 								}}
 							>
+							{/* Map image rendered inside the SVG so it shares one rasterization
+							    context with the overlay — prevents layer-compositing drift
+							    between the image and the axes at high zoom. */}
+							<image
+								href={imgSrc.current}
+								width={imgNatural.w}
+								height={imgNatural.h}
+								preserveAspectRatio="none"
+								style={{ userSelect: "none" }}
+							/>
 							{/* Coordinate axes with meter measurements */}
 							{(() => {
 								const b = mapData!.bounds;
