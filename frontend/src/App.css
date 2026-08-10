@@ -295,6 +295,11 @@ body {
 	right: 8px;
 }
 
+.bottom-right {
+	bottom: 8px;
+	right: 8px;
+}
+
 /* ===== Score Card ===== */
 .score-card {
 	padding: 8px 0;

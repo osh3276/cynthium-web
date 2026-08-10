@@ -40,6 +40,12 @@ const TURBO_COLORMAP: [number, number, number, number][] = [
 	[1.000, 0.500, 0.050, 0.087],
 ];
 
+// CSS gradient matching the turbo colormap, min value at the bottom.
+const TURBO_GRADIENT = `linear-gradient(to top, ${TURBO_COLORMAP.map(
+	([t, r, g, b]) =>
+		`rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}) ${Math.round(t * 100)}%`,
+).join(", ")})`;
+
 // Build a dense reverse lookup: for each RGB triplet (0-255), precompute closest normalized value
 const TURBO_LUT_SIZE = 256;
 const TURBO_LUT: { r: number; g: number; b: number; norm: number }[] = [];
@@ -100,6 +106,25 @@ function fmtAxis(v: number): string {
 		return Number.isInteger(km) ? `${km} km` : `${km.toFixed(1)} km`;
 	}
 	return `${r} m`;
+}
+
+/** Format a map value for the legend, dropping a trailing ".0". */
+function fmtValue(v: number): string {
+	return String(parseFloat(v.toFixed(1)));
+}
+
+/** Unit suffix for a map type, mirroring readPixelValue's labels. */
+function mapUnit(label: string): string {
+	if (label === "Elevation") return "m";
+	if (label.includes("Slope")) return "°";
+	if (label.includes("Temperature")) return "K";
+	if (label.includes("Illumination")) return "W/m²";
+	return "";
+}
+
+/** Whether a map type carries a meaningful value scale (not a grayscale render). */
+function hasValueRange(label: string): boolean {
+	return label !== "Hillshade";
 }
 
 interface Props {
@@ -385,7 +410,7 @@ export default function MapView({
 				: mapData.label.includes("Slope")
 					? "°"
 					: mapData.label.includes("Temperature")
-						? "°C"
+						? "K"
 						: mapData.label.includes("Illumination")
 							? "W/m²"
 							: "";
@@ -1014,9 +1039,17 @@ export default function MapView({
 							className="view-overlay top-left"
 							style={{ zIndex: 20 }}
 						>
-							{mapData.label} ({mapData.value_range[0].toFixed(1)}{" "}
-							- {mapData.value_range[1].toFixed(1)}) ·{" "}
-							{displayScale.toFixed(1)}x · {displayWpCount} pts
+							{mapData.label}
+							{hasValueRange(mapData.label) && (
+								<>
+									{" "}(
+									{fmtValue(mapData.value_range[0])}
+									{mapUnit(mapData.label)} -{" "}
+									{fmtValue(mapData.value_range[1])}
+									{mapUnit(mapData.label)})
+								</>
+							)}
+							{" "}· {displayScale.toFixed(1)}x · {displayWpCount} pts
 							{hoverValue && (
 								<div style={{ marginTop: 2, fontSize: 12, color: "#00d4ff", textTransform: "none" }}>
 									{hoverValue.val.toFixed(2)}{hoverValue.label}
@@ -1055,8 +1088,127 @@ export default function MapView({
 							{autoRoverAnim.failed && " - FAILED"}
 						</div>
 					)}
-				</>
-			)}
+					{/* Scale bar — pinned to the viewport, shows the current zoom's scale */}
+					{mapData &&
+						(() => {
+							const b = mapData.bounds;
+							const range = b.right - b.left;
+							if (range <= 0 || imgNatural.w <= 0) return null;
+							const pxPerMeter = (imgNatural.w / range) * displayScale;
+							const dist = niceStep(120 / pxPerMeter);
+							const barPx = Math.max(24, dist * pxPerMeter);
+							return (
+								<div
+									className="view-overlay bottom-right"
+									style={{ zIndex: 20 }}
+								>
+									<div style={{ display: "flex", flexDirection: "column" }}>
+										<svg
+											width={barPx}
+											height={8}
+											style={{ display: "block", marginBottom: 2 }}
+										>
+											<line
+												x1={0}
+												y1={4}
+												x2={barPx}
+												y2={4}
+												stroke="#fff"
+												strokeWidth={1.5}
+											/>
+											<line
+												x1={0}
+												y1={1}
+												x2={0}
+												y2={7}
+												stroke="#fff"
+												strokeWidth={1.5}
+											/>
+											<line
+												x1={barPx}
+												y1={1}
+												x2={barPx}
+												y2={7}
+												stroke="#fff"
+												strokeWidth={1.5}
+											/>
+										</svg>
+										<span
+											style={{
+												fontSize: 10,
+												color: "var(--text-dim)",
+												textTransform: "none",
+												letterSpacing: 0,
+											}}
+										>
+											{fmtAxis(dist)}
+										</span>
+									</div>
+								</div>
+							);
+						})()}
+				{/* Legend — color ramp for the current map values */}
+				{mapData && hasValueRange(mapData.label) && (
+					<div
+						className="view-overlay"
+						style={{
+							right: 8,
+							top: "50%",
+							transform: "translateY(-50%)",
+							zIndex: 20,
+							display: "flex",
+							flexDirection: "column",
+							alignItems: "center",
+						}}
+					>
+						<span
+							style={{
+								fontSize: 10,
+								color: "var(--text-dim)",
+								textTransform: "none",
+								letterSpacing: 0,
+								marginBottom: 2,
+							}}
+						>
+							{mapData.label}
+						</span>
+						<span
+							style={{
+								fontSize: 10,
+								color: "var(--text-bright)",
+								textTransform: "none",
+								letterSpacing: 0,
+								marginBottom: 2,
+							}}
+						>
+							{fmtValue(mapData.value_range[1])}
+							{mapUnit(mapData.label)}
+						</span>
+						<div
+							style={{
+								width: 14,
+								height: 140,
+								background: TURBO_GRADIENT,
+								border: "1px solid rgba(255,255,255,0.25)",
+								borderRadius: 2,
+							}}
+						/>
+						<span
+							style={{
+								fontSize: 10,
+								color: "var(--text-bright)",
+								textTransform: "none",
+								letterSpacing: 0,
+								marginTop: 2,
+							}}
+						>
+							{fmtValue(mapData.value_range[0])}
+							{mapUnit(mapData.label)}
+						</span>
+					</div>
+				)}
+			</>
+		)}
 		</div>
 	);
 }
