@@ -79,6 +79,29 @@ function turboNormFromRGB(r: number, g: number, b: number): number {
 /** Scale factor for animation speed (270x real-time). */
 const ROVER_ANIMATION_SPEED = 270;
 
+/** Screen-space padding around the map image for the axis label bands. */
+const AXIS_PAD = 48;
+
+/** Round a raw step to a "nice" 1, 2, or 5 x 10^n value. */
+function niceStep(raw: number): number {
+	if (raw <= 0 || !isFinite(raw)) return 1;
+	const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+	const norm = raw / mag;
+	const base = norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10;
+	return base * mag;
+}
+
+/** Format an axis tick value, using km for magnitudes of a kilometer or more. */
+function fmtAxis(v: number): string {
+	const r = Math.round(v);
+	if (r === 0) return "0";
+	if (Math.abs(r) >= 1000) {
+		const km = r / 1000;
+		return Number.isInteger(km) ? `${km} km` : `${km.toFixed(1)} km`;
+	}
+	return `${r} m`;
+}
+
 interface Props {
 		mapData: MapPayload | null;
 		status: LoadStatus;
@@ -166,7 +189,12 @@ export default function MapView({
 		// restores exactly the intended thickness.
 		el.style.setProperty("--sw-2", `${2 / s}px`);
 		el.style.setProperty("--sw-4", `${4 / s}px`);
+		el.style.setProperty("--sw-1", `${1 / s}px`);
 		el.style.setProperty("--dash-6-3", `${6 / s}px ${3 / s}px`);
+		// Axis label band: keep a constant screen-size margin around the image
+		el.style.setProperty("--axis-pad", `${AXIS_PAD / s}px`);
+		// Total vertical pad (top band + bottom band) for the SVG height
+		el.style.setProperty("--axis-pad-2", `${(AXIS_PAD * 2) / s}px`);
 	}, []);
 
 	// Load image
@@ -608,13 +636,127 @@ export default function MapView({
 						<svg
 							style={{
 								position: "absolute",
-								top: 0,
-								left: 0,
-								width: imgNatural.w,
-								height: imgNatural.h,
+								top: `calc(0px - var(--axis-pad))`,
+								left: `calc(0px - var(--axis-pad))`,
+								width: `calc(${imgNatural.w}px + var(--axis-pad))`,
+								height: `calc(${imgNatural.h}px + var(--axis-pad-2))`,
 								pointerEvents: "none",
 							}}
 						>
+							<g
+								style={{
+									transform: "translate(var(--axis-pad), var(--axis-pad))",
+									transformOrigin: "0 0",
+									transformBox: "view-box",
+								}}
+							>
+							{/* Coordinate axes with meter measurements */}
+							{(() => {
+								const b = mapData!.bounds;
+								const W = imgNatural.w;
+								const H = imgNatural.h;
+								const xRange = b.right - b.left;
+								const yRange = b.top - b.bottom;
+								if (xRange <= 0 || yRange <= 0) return null;
+								// Step adapts to the current zoom so tick density stays roughly
+								// constant on screen. displayScale updates on a 100ms throttle
+								// during zoom, which re-renders and refreshes the ticks.
+								const TARGET_TICK_PX = 150;
+								const xStep = niceStep(
+									(TARGET_TICK_PX * xRange) / (W * displayScale),
+								);
+								const yStep = niceStep(
+									(TARGET_TICK_PX * yRange) / (H * displayScale),
+								);
+								const xFirst = Math.ceil(b.left / xStep) * xStep;
+								const xCount = Math.min(
+									Math.floor((b.right - xFirst) / xStep) + 1,
+									200,
+								);
+								const xTicks = Array.from(
+									{ length: Math.max(0, xCount) },
+									(_, i) => Math.round(xFirst + i * xStep),
+								);
+								const yFirst = Math.ceil(b.bottom / yStep) * yStep;
+								const yCount = Math.min(
+									Math.floor((b.top - yFirst) / yStep) + 1,
+									200,
+								);
+								const yTicks = Array.from(
+									{ length: Math.max(0, yCount) },
+									(_, i) => Math.round(yFirst + i * yStep),
+								);
+								return (
+									<g>
+										{/* Bottom (X) axis */}
+										<line
+											x1={0}
+											y1={H}
+											x2={W}
+											y2={H}
+											stroke="rgba(255,255,255,0.35)"
+											style={{ strokeWidth: "var(--sw-1)" }}
+										/>
+										{xTicks.map((v, i) => {
+											const ix = ((v - b.left) / xRange) * W;
+											return (
+												<FixedSize key={`ax${i}`} x={ix} y={H}>
+													<line
+														x1={0}
+														y1={0}
+														x2={0}
+														y2={6}
+														stroke="rgba(255,255,255,0.35)"
+														strokeWidth={1}
+													/>
+													<text
+														x={0}
+														y={14}
+														textAnchor="middle"
+														fill="#cfd8dc"
+														fontSize={9}
+													>
+														{fmtAxis(v)}
+													</text>
+											</FixedSize>
+										);
+									})}
+									{/* Left (Y) axis */}
+										<line
+											x1={0}
+											y1={0}
+											x2={0}
+											y2={H}
+											stroke="rgba(255,255,255,0.35)"
+											style={{ strokeWidth: "var(--sw-1)" }}
+										/>
+										{yTicks.map((v, i) => {
+											const iy = H - ((v - b.bottom) / yRange) * H;
+											return (
+												<FixedSize key={`ay${i}`} x={0} y={iy}>
+													<line
+														x1={0}
+														y1={0}
+														x2={-6}
+														y2={0}
+														stroke="rgba(255,255,255,0.35)"
+														strokeWidth={1}
+													/>
+													<text
+														x={-9}
+														y={3}
+														textAnchor="end"
+														fill="#cfd8dc"
+														fontSize={9}
+													>
+														{fmtAxis(v)}
+													</text>
+											</FixedSize>
+										);
+									})}
+								</g>
+								);
+							})()}
 							{gameWaypoints?.map((wp, idx) => {
 								const b = mapData!.bounds;
 								const ix =
@@ -864,6 +1006,7 @@ export default function MapView({
 									/>
 								</FixedSize>
 							)}
+							</g>
 						</svg>
 					</div>
 					{mapData && (
