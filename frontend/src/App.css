@@ -500,28 +500,36 @@ body {
 .sidebar::-webkit-scrollbar,
 .inner-tab-content::-webkit-scrollbar,
 .results-scroll::-webkit-scrollbar,
-.field-textarea::-webkit-scrollbar {
+.field-textarea::-webkit-scrollbar,
+.docs-main::-webkit-scrollbar,
+.docs-nav::-webkit-scrollbar {
 	width: 6px;
 }
 
 .sidebar::-webkit-scrollbar-track,
 .inner-tab-content::-webkit-scrollbar-track,
 .results-scroll::-webkit-scrollbar-track,
-.field-textarea::-webkit-scrollbar-track {
+.field-textarea::-webkit-scrollbar-track,
+.docs-main::-webkit-scrollbar-track,
+.docs-nav::-webkit-scrollbar-track {
 	background: var(--scrollbar-bg);
 }
 
 .sidebar::-webkit-scrollbar-thumb,
 .inner-tab-content::-webkit-scrollbar-thumb,
 .results-scroll::-webkit-scrollbar-thumb,
-.field-textarea::-webkit-scrollbar-thumb {
+.field-textarea::-webkit-scrollbar-thumb,
+.docs-main::-webkit-scrollbar-thumb,
+.docs-nav::-webkit-scrollbar-thumb {
 	background: var(--scrollbar-thumb);
 }
 
 .sidebar::-webkit-scrollbar-thumb:hover,
 .inner-tab-content::-webkit-scrollbar-thumb:hover,
 .results-scroll::-webkit-scrollbar-thumb:hover,
-.field-textarea::-webkit-scrollbar-thumb:hover {
+.field-textarea::-webkit-scrollbar-thumb:hover,
+.docs-main::-webkit-scrollbar-thumb:hover,
+.docs-nav::-webkit-scrollbar-thumb:hover {
 	background: var(--scrollbar-thumb-hover);
 }
 

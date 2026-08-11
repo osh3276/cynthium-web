@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import ViewContainer from "./components/ViewContainer";
 import SimulationResultsPanel from "./components/SimulationResultsPanel";
 import Sidebar from "./components/Sidebar";
+import HeaderNav from "./components/HeaderNav";
 import {
 	type MapPayload,
 	type Waypoint,
@@ -322,6 +323,7 @@ function App() {
 					<span className="header-version">v{APP_VERSION}</span>
 				</div>
 				<div className="header-tagline">{APP_TAGLINE}</div>
+				<HeaderNav />
 				<div className="header-glow" />
 			</header>
 			<div className="main-content">

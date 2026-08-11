@@ -1,0 +1,244 @@
+/* ===== Docs page ===== */
+
+.docs-layout {
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	overflow: hidden;
+	background: var(--bg);
+}
+
+.docs-header .header-tagline {
+	margin-left: auto;
+}
+
+.docs-body {
+	flex: 1;
+	display: flex;
+	overflow: hidden;
+}
+
+/* Sidebar navigation */
+.docs-nav {
+	width: 220px;
+	flex-shrink: 0;
+	padding: 20px 0;
+	border-right: 1px solid var(--border);
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.docs-nav-title {
+	padding: 0 20px 10px;
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 1.5px;
+	text-transform: uppercase;
+	color: var(--text-dim);
+}
+
+.docs-nav-link {
+	padding: 6px 20px;
+	font-size: 13px;
+	color: var(--text-dim);
+	text-decoration: none;
+	border-left: 2px solid transparent;
+	transition: color 0.15s, background 0.15s;
+}
+
+.docs-nav-link:hover {
+	color: var(--text-bright);
+	background: var(--bg-hover);
+}
+
+.docs-nav-active {
+	color: var(--accent);
+	border-left-color: var(--accent);
+	background: rgba(0, 212, 255, 0.06);
+}
+
+/* Scrollable content */
+.docs-main {
+	flex: 1;
+	overflow-y: auto;
+}
+
+/* Centered inner column: the scrollbar belongs to .docs-main and
+   reaches the viewport edge while the content stays at max-width. */
+.docs-content {
+	max-width: 860px;
+	margin: 0 auto;
+	padding: 32px 48px 48px;
+}
+
+.docs-section {
+	scroll-margin-top: 24px;
+	margin-bottom: 40px;
+}
+
+.docs-subsection {
+	scroll-margin-top: 24px;
+	margin-top: 20px;
+}
+
+.docs-h2 {
+	font-size: 22px;
+	font-weight: 700;
+	color: var(--text-bright);
+	padding-bottom: 8px;
+	margin-bottom: 16px;
+	border-bottom: 1px solid var(--border);
+}
+
+.docs-h3 {
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--accent);
+	margin-bottom: 10px;
+}
+
+.docs-p {
+	font-size: 13.5px;
+	line-height: 1.7;
+	color: var(--text);
+	margin-bottom: 12px;
+}
+
+.docs-code {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	color: var(--accent-hover);
+	background: var(--bg-light);
+	border: 1px solid var(--tab-border);
+	border-radius: 4px;
+	padding: 1px 5px;
+}
+
+.docs-link {
+	color: var(--accent);
+	text-decoration: none;
+}
+
+.docs-link:hover {
+	text-decoration: underline;
+}
+
+.docs-codeblock {
+	margin: 12px 0 16px;
+	border: 1px solid var(--tab-border);
+	border-radius: 6px;
+	overflow: hidden;
+	background: var(--bg-light);
+}
+
+.docs-codeblock-title {
+	padding: 6px 12px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	color: var(--text-dim);
+	background: var(--bg-lighter);
+	border-bottom: 1px solid var(--tab-border);
+}
+
+.docs-codeblock-pre {
+	margin: 0;
+	padding: 12px 14px;
+	overflow-x: auto;
+	font-family: var(--font-mono);
+	font-size: 12px;
+	line-height: 1.6;
+	color: var(--text-bright);
+	tab-size: 2;
+}
+
+.docs-note {
+	margin: 12px 0 16px;
+	padding: 10px 14px;
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--text);
+	background: rgba(0, 212, 255, 0.05);
+	border: 1px solid rgba(0, 212, 255, 0.25);
+	border-left: 3px solid var(--accent);
+	border-radius: 4px;
+}
+
+.docs-table {
+	width: 100%;
+	margin: 12px 0 16px;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+
+.docs-table th {
+	text-align: left;
+	font-weight: 600;
+	color: var(--text-bright);
+	background: var(--bg-lighter);
+	padding: 8px 12px;
+	border: 1px solid var(--tab-border);
+}
+
+.docs-table td {
+	padding: 8px 12px;
+	color: var(--text);
+	border: 1px solid var(--tab-border);
+	vertical-align: top;
+	line-height: 1.5;
+}
+
+.docs-list {
+	margin: 8px 0 14px;
+	padding-left: 22px;
+	font-size: 13.5px;
+	line-height: 1.7;
+	color: var(--text);
+}
+
+.docs-list li {
+	margin-bottom: 4px;
+}
+
+.docs-footer {
+	margin-top: 32px;
+	padding-top: 16px;
+	border-top: 1px solid var(--border);
+	font-size: 11px;
+	letter-spacing: 1px;
+	text-transform: uppercase;
+	color: var(--text-dim);
+}
+
+/* Header navigation shared across pages */
+.header-nav {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	margin-left: 24px;
+}
+
+.header-nav-link {
+	padding: 4px 12px;
+	font-size: 12px;
+	font-weight: 500;
+	letter-spacing: 0.5px;
+	text-transform: uppercase;
+	color: var(--text-dim);
+	text-decoration: none;
+	border-radius: 4px;
+	transition: color 0.15s, background 0.15s;
+}
+
+.header-nav-link:hover {
+	color: var(--text-bright);
+	background: var(--bg-hover);
+}
+
+.header-nav-active {
+	color: var(--accent);
+	background: rgba(0, 212, 255, 0.08);
+}

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import ViewContainer from "../components/ViewContainer";
 import GameSidebar from "./GameSidebar";
 import Game from "./Game";
+import HeaderNav from "../components/HeaderNav";
 import { useGame } from "./useGame";
 import { fetchGamesList } from "./api";
 import type { MapPayload, Waypoint, AutodesignResult, SimulationStats, GameDefinition, GameData } from "../types";
@@ -170,6 +171,7 @@ export default function GamePage() {
 					<span className="header-version">v{APP_VERSION}</span>
 				</div>
 				<div className="header-tagline">{APP_TAGLINE}</div>
+				<HeaderNav />
 				<div className="header-glow" />
 			</header>
 			<div className="main-content">
